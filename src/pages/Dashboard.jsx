@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import {
@@ -18,14 +18,9 @@ import {
   fetchTrips,
   markTripConfirmed,
 } from "../features/tripsSlice";
-import {
-  distanceInMeters,
-  findNearestStation,
-} from "../services/geolocationService";
+import { distanceInMeters } from "../services/geolocationService";
+import { startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
 
-const STATION_RADIUS_M = 120;
-const MIN_TRAVEL_MINUTES = 5;
-const MAX_ACCEPTABLE_ACCURACY_M = 100;
 const WEEKDAY_SLABS = [
   { maxKm: 2, fare: 11 },
   { maxKm: 5, fare: 21 },
@@ -78,6 +73,9 @@ export default function Dashboard() {
   const dispatch = useDispatch();
   const wallet = useSelector((state) => state.wallet);
   const trips = useSelector((state) => state.trips.items);
+  const { active: monitoring, message: monitorMessage } = useSelector(
+    (state) => state.monitoring
+  );
 
   const [rechargeAmount, setRechargeAmount] = useState("100");
   const [rechargeMode, setRechargeMode] = useState("online");
@@ -93,20 +91,9 @@ export default function Dashboard() {
   const [debouncedAlightingSearch, setDebouncedAlightingSearch] = useState("");
   const [error, setError] = useState("");
 
-  const [monitoring, setMonitoring] = useState(false);
-  const [monitorMessage, setMonitorMessage] = useState(
-    "Travel monitoring is off"
-  );
-
-  const watchIdRef = useRef(null);
   const { scrollY } = useScroll();
   const orbY1 = useTransform(scrollY, [0, 900], [0, -40]);
   const orbY2 = useTransform(scrollY, [0, 900], [0, -65]);
-  const travelStateRef = useRef({
-    boardedStation: null,
-    boardedAt: null,
-    lastCreatedAt: 0,
-  });
 
   useEffect(() => {
     const load = async () => {
@@ -123,14 +110,6 @@ export default function Dashboard() {
     };
     load();
   }, [dispatch]);
-
-  useEffect(
-    () => () => {
-      if (watchIdRef.current !== null)
-        navigator.geolocation.clearWatch(watchIdRef.current);
-    },
-    []
-  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -409,137 +388,13 @@ export default function Dashboard() {
     }
   };
 
-  const handlePosition = async (position) => {
-    // A GPS fix with poor accuracy (common underground/near tall buildings)
-    // can report a wildly wrong position, which would corrupt the 120m
-    // station-radius check below - so unreliable fixes are ignored outright
-    // rather than acted on. `accuracy` is the radius (meters) of the
-    // confidence circle the browser itself reports for this fix.
-    const accuracy = position.coords.accuracy;
-    if (typeof accuracy === "number" && accuracy > MAX_ACCEPTABLE_ACCURACY_M) {
-      setMonitorMessage(
-        `Waiting for a better GPS fix (accuracy ±${Math.round(accuracy)}m)...`
-      );
-      return;
-    }
-
-    const coords = {
-      lat: position.coords.latitude,
-      lng: position.coords.longitude,
-    };
-    const nearest = findNearestStation(coords, geoStations);
-    if (!nearest) return;
-
-    if (nearest.meters > STATION_RADIUS_M) {
-      setMonitorMessage(
-        `Moving. Nearest station: ${nearest.station.name} (${Math.round(
-          nearest.meters
-        )}m)`
-      );
-      return;
-    }
-
-    const now = Date.now();
-    const state = travelStateRef.current;
-
-    if (!state.boardedStation) {
-      state.boardedStation = nearest.station;
-      state.boardedAt = now;
-      setMonitorMessage(
-        `Boarding detected at ${nearest.station.name}. Waiting for destination...`
-      );
-      return;
-    }
-
-    if (state.boardedStation.id === nearest.station.id) {
-      setMonitorMessage(
-        `Still at ${nearest.station.name}. Monitoring continues.`
-      );
-      return;
-    }
-
-    const tripMinutes = (now - state.boardedAt) / 60000;
-    if (tripMinutes < MIN_TRAVEL_MINUTES) {
-      setMonitorMessage(
-        `Detected ${nearest.station.name}. Waiting minimum ${MIN_TRAVEL_MINUTES} min trip window.`
-      );
-      return;
-    }
-
-    if (now - state.lastCreatedAt < 120000) return;
-
-    // Reserve the cooldown before the request goes out, not after it
-    // resolves. watchPosition can fire another update while this request is
-    // still in flight; without reserving first, that second call would also
-    // pass the cooldown check above and create a duplicate pending trip.
-    state.lastCreatedAt = now;
-
-    const meters = distanceInMeters(state.boardedStation, nearest.station);
-    const distanceKmAuto = Math.max(1, Number((meters / 1000).toFixed(1)));
-    const fromStationName = state.boardedStation.name;
-    const toStationName = nearest.station.name;
-
-    try {
-      await dispatch(
-        addPendingTrip({
-          boardingStationId: state.boardedStation.id,
-          alightingStationId: nearest.station.id,
-          boardingStationName: fromStationName,
-          alightingStationName: toStationName,
-          distanceKm: distanceKmAuto,
-          isSmartCard: true,
-          travelDate: new Date().toISOString(),
-        })
-      ).unwrap();
-
-      state.boardedStation = nearest.station;
-      state.boardedAt = now;
-
-      setMonitorMessage(
-        `Trip captured: ${distanceKmAuto} km from ${fromStationName} to ${toStationName}.`
-      );
-      await refresh();
-    } catch (e) {
-      state.lastCreatedAt = 0; // release the reservation so the next detection can retry
-      setError(
-        e?.response?.data?.message || e?.message || "Auto trip creation failed"
-      );
-    }
-  };
-
   const startMonitoring = () => {
     setError("");
-    if (!navigator.geolocation)
-      return setError("Geolocation not supported in this browser");
-    if (watchIdRef.current !== null) return;
-
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (position) =>
-        handlePosition(position).catch(() =>
-          setError("Location processing failed")
-        ),
-      (geoError) => setError(geoError.message || "Unable to read location"),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
-    );
-
-    setMonitoring(true);
-    setMonitorMessage(
-      "Travel monitoring enabled. Move near stations to auto-capture trips."
-    );
+    startMonitoringWatch(dispatch);
   };
 
   const stopMonitoring = () => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
-    travelStateRef.current = {
-      boardedStation: null,
-      boardedAt: null,
-      lastCreatedAt: 0,
-    };
-    setMonitoring(false);
-    setMonitorMessage("Travel monitoring is off");
+    stopMonitoringWatch(dispatch);
   };
 
   return (

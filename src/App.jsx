@@ -9,6 +9,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import AuthForm from "./components/AuthForm";
 import { logout } from "./features/authSlice";
+import { stopMonitoringWatch } from "./services/monitoringWatch";
 import Dashboard from "./pages/Dashboard";
 import History from "./pages/History";
 import Logs from "./pages/Logs";
@@ -43,7 +44,13 @@ function Shell() {
             </div>
           )}
           {token && (
-            <button className="secondary" onClick={() => dispatch(logout())}>
+            <button
+              className="secondary"
+              onClick={() => {
+                stopMonitoringWatch(dispatch);
+                dispatch(logout());
+              }}
+            >
               Logout
             </button>
           )}
