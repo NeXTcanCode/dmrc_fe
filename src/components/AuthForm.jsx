@@ -41,11 +41,11 @@ export default function AuthForm() {
       transition={{ duration: 0.35, ease: "easeOut" }}
     >
       <div className="auth-head">
-        <img
+        {/* <img
           src="/images/Delhi_Metro_logo.webp"
           alt="DMRC logo"
           className="auth-logo"
-        />
+        /> */}
         <p className="eyebrow">Secure Access</p>
         <h2>{mode === "login" ? "Welcome Back" : "Create Your Account"}</h2>
       </div>
@@ -54,7 +54,7 @@ export default function AuthForm() {
           Your session expired. Please log in again.
         </small>
       )}
-      here add dmrc logo present in public image
+
       <form className="form-grid" onSubmit={onSubmit}>
         {mode === "register" && (
           <label>
