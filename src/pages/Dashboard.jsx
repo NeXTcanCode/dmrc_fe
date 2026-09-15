@@ -20,6 +20,8 @@ import {
 } from "../features/tripsSlice";
 import { distanceInMeters } from "../services/geolocationService";
 import { startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
+import { planJourney } from "../services/metroService";
+import { DMRC_STATION_CODES } from "../data/dmrcStationCodes";
 
 const WEEKDAY_SLABS = [
   { maxKm: 2, fare: 11 },
@@ -183,12 +185,7 @@ export default function Dashboard() {
     return 8;
   };
 
-  const estimatedDistanceKm = useMemo(
-    () => getEstimatedDistanceKm(boardingStationId, alightingStationId),
-    [boardingStationId, alightingStationId]
-  );
-
-  const estimatedFare = useMemo(() => {
+  const getLocalEstimatedFare = (distanceKm) => {
     const date = new Date();
     const day = date.getDay(); // 0 Sunday
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -199,7 +196,7 @@ export default function Dashboard() {
 
     let baseFare = 11;
     for (const slab of slabs) {
-      if (estimatedDistanceKm <= slab.maxKm) {
+      if (distanceKm <= slab.maxKm) {
         baseFare = slab.fare;
         break;
       }
@@ -213,7 +210,56 @@ export default function Dashboard() {
       if (offPeak) finalFare = Math.round(baseFare * 0.9);
     }
     return Math.max(11, finalFare);
-  }, [estimatedDistanceKm]);
+  };
+
+  // Same journey-planning pricing as the Plan page: prefer the live/offline
+  // DMRC route-based distance and fare over the crude local heuristic below,
+  // which only remains as a fallback for stations without a DMRC code or if
+  // the request fails.
+  const [journeyEstimate, setJourneyEstimate] = useState(null);
+  const [estimateLoading, setEstimateLoading] = useState(false);
+
+  useEffect(() => {
+    const fromCode = DMRC_STATION_CODES[stationNameById[boardingStationId]];
+    const toCode = DMRC_STATION_CODES[stationNameById[alightingStationId]];
+    setJourneyEstimate(null);
+    if (!fromCode || !toCode || fromCode === toCode) return;
+
+    let cancelled = false;
+    setEstimateLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await planJourney(fromCode, toCode, "least-distance");
+        if (cancelled) return;
+        const distanceKm = data?.total_distance_km;
+        const fare = data?.fare?.applicable ?? data?.fare?.normal;
+        if (typeof distanceKm === "number" && typeof fare === "number") {
+          setJourneyEstimate({ distanceKm, fare });
+        }
+      } catch {
+        // fall through to the local heuristic below
+      } finally {
+        if (!cancelled) setEstimateLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [boardingStationId, alightingStationId, stationNameById]);
+
+  const estimatedDistanceKm = useMemo(
+    () =>
+      journeyEstimate?.distanceKm ??
+      getEstimatedDistanceKm(boardingStationId, alightingStationId),
+    [journeyEstimate, boardingStationId, alightingStationId]
+  );
+
+  const estimatedFare = useMemo(
+    () => journeyEstimate?.fare ?? getLocalEstimatedFare(estimatedDistanceKm),
+    [journeyEstimate, estimatedDistanceKm]
+  );
 
   useEffect(() => {
     if (!filteredBoardingOptions.length) return;
@@ -580,8 +626,16 @@ export default function Dashboard() {
           </motion.button>
         </div>
         <p className="manual-estimate" style={{ marginTop: "8px" }}>
-          Estimated distance for fare: <strong>{estimatedDistanceKm} km</strong>{" "}
-          • Estimated fare: <strong>INR {estimatedFare}</strong>
+          {estimateLoading ? (
+            "Fetching live route pricing..."
+          ) : (
+            <>
+              Estimated distance for fare:{" "}
+              <strong>{estimatedDistanceKm} km</strong> • Estimated fare:{" "}
+              <strong>INR {estimatedFare}</strong>
+              {!journeyEstimate && " (offline estimate)"}
+            </>
+          )}
         </p>
       </motion.section>
 
