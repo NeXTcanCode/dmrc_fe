@@ -82,6 +82,10 @@ small.error {
   font-weight: 700;
 }
 
+.username_logout {
+  display: flex;
+  gap: 20px;
+}
 .userbox {
   background: #edf6ff;
   border: 1px solid #d6e8ff;
@@ -142,6 +146,11 @@ small.error {
 @media (min-width: 576px) {
   .tabs .col-sm-4 {
     width: 33.3333%;
+  }
+}
+@media (max-width: 767px) {
+  .username_logout {
+    flex-direction: column;
   }
 }
 @media (min-width: 768px) {

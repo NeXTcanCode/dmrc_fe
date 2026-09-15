@@ -35,7 +35,7 @@ function Shell() {
           <p className="eyebrow">Delhi Metro Wallet</p>
           <h1>DMRC </h1>
         </div>
-        <div style={{ display: "flex", gap: "20px" }}>
+        <div className="username_logout">
           {token && (
             <div className="userbox">
               <p>{user?.name}</p>
