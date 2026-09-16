@@ -389,6 +389,7 @@ export default function Plan() {
 
                   {/* Legend */}
                   <g transform={`translate(${MAP_PADDING - 20}, ${MAP_PADDING - 20})`} fontSize="11">
+                    <rect x={-14} y={-16} width={450} height={32} rx={10} fill={PANEL_BG} opacity={0.92} />
                     <circle cx={4} cy={0} r={5} fill="#ffffff" stroke="#1a9d5c" strokeWidth={3} />
                     <text x={16} y={4} fill="var(--text)">Start</text>
                     <circle cx={64} cy={0} r={5} fill="#ffffff" stroke="#c0392b" strokeWidth={3} />
