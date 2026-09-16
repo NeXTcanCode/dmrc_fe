@@ -5,9 +5,28 @@ import { getLineStations, getLines, getMapData } from '../services/metroService'
 const MAP_PADDING = 40;
 const INTERCHANGE_RADIUS = 7;
 const STATION_RADIUS = 3;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.25;
+
+const VIEWS = [
+  { id: 'dmrc', label: 'DMRC' },
+  { id: 'nmrc', label: 'NMRC' },
+  { id: 'app', label: 'App View' },
+  { id: 'coords', label: 'Coordinates' },
+];
 
 export default function MetroMap() {
   const [view, setView] = useState('dmrc');
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    setZoom(1);
+  }, [view]);
+
+  const zoomIn = () => setZoom((z) => Math.min(ZOOM_MAX, Number((z + ZOOM_STEP).toFixed(2))));
+  const zoomOut = () => setZoom((z) => Math.max(ZOOM_MIN, Number((z - ZOOM_STEP).toFixed(2))));
+  const zoomReset = () => setZoom(1);
 
   const [lines, setLines] = useState([]);
   const [stationsByLine, setStationsByLine] = useState({});
@@ -96,36 +115,60 @@ export default function MetroMap() {
       <div className="section-head">
         <h2>Network Map</h2>
         <p>
-          {view === 'dmrc'
-            ? "DMRC's official network layout, station-accurate."
-            : 'Every DMRC line, drawn as a station-order strip, sourced live.'}
+          {view === 'dmrc' && "DMRC's official network map."}
+          {view === 'nmrc' && "NMRC's official Aqua Line network map."}
+          {view === 'app' && 'Every DMRC line, drawn as a station-order strip, sourced live.'}
+          {view === 'coords' && "DMRC's official layout, plotted from station coordinates."}
         </p>
       </div>
 
-      <div className="row actions" style={{ marginBottom: '16px' }}>
-        <button
-          className={view === 'dmrc' ? '' : 'secondary'}
-          onClick={() => setView('dmrc')}
-        >
-          DMRC Map
-        </button>
-        <button
-          className={view === 'app' ? '' : 'secondary'}
-          onClick={() => setView('app')}
-        >
-          App View
-        </button>
+      <div className="row actions" style={{ marginBottom: '16px', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+        <div className="row actions">
+          {VIEWS.map((v) => (
+            <button
+              key={v.id}
+              className={view === v.id ? '' : 'secondary'}
+              onClick={() => setView(v.id)}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {view !== 'app' && (
+          <div className="row actions">
+            <button className="secondary" onClick={zoomOut} disabled={zoom <= ZOOM_MIN}>
+              −
+            </button>
+            <button className="secondary" onClick={zoomReset} style={{ minWidth: '64px' }}>
+              {Math.round(zoom * 100)}%
+            </button>
+            <button className="secondary" onClick={zoomIn} disabled={zoom >= ZOOM_MAX}>
+              +
+            </button>
+          </div>
+        )}
       </div>
 
-      {view === 'dmrc' && (
+      {(view === 'dmrc' || view === 'nmrc') && (
+        <div style={{ overflow: 'auto', border: '1px solid var(--line)', borderRadius: '12px', maxHeight: '70vh' }}>
+          <img
+            src={view === 'dmrc' ? '/images/dmrc.jpg' : '/images/nmrc-aqua-network-map.jpg'}
+            alt={view === 'dmrc' ? 'DMRC official network map' : 'NMRC Aqua Line network map'}
+            style={{ display: 'block', width: `${zoom * 100}%`, maxWidth: 'none' }}
+          />
+        </div>
+      )}
+
+      {view === 'coords' && (
         <>
-          {mapLoading && <p>Loading DMRC map...</p>}
+          {mapLoading && <p>Loading map coordinates...</p>}
           {mapError && <small className="error">{mapError}</small>}
           {!mapLoading && !mapError && mapGeometry && (
-            <div style={{ overflow: 'auto', border: '1px solid var(--line)', borderRadius: '12px' }}>
+            <div style={{ overflow: 'auto', border: '1px solid var(--line)', borderRadius: '12px', maxHeight: '70vh' }}>
               <svg
-                width={mapGeometry.width}
-                height={mapGeometry.height}
+                width={mapGeometry.width * zoom}
+                height={mapGeometry.height * zoom}
                 viewBox={`0 0 ${mapGeometry.width} ${mapGeometry.height}`}
               >
                 {mapData.lines.map((line) => {
