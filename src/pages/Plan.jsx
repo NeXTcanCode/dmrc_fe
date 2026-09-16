@@ -393,10 +393,10 @@ export default function Plan() {
                     <text x={16} y={4} fill="var(--text)">Start</text>
                     <circle cx={64} cy={0} r={5} fill="#ffffff" stroke="#c0392b" strokeWidth={3} />
                     <text x={76} y={4} fill="var(--text)">End</text>
-                    <line x1={122} y1={0} x2={142} y2={0} stroke="var(--primary-strong)" strokeWidth={4} strokeLinecap="round" />
-                    <text x={148} y={4} fill="var(--text)">Your route</text>
-                    <line x1={222} y1={0} x2={242} y2={0} stroke={GREY_LINE} strokeWidth={3} strokeLinecap="round" />
-                    <text x={248} y={4} fill="var(--muted)">Network</text>
+                    <line x1={122} y1={0} x2={142} y2={0} stroke="var(--text)" strokeWidth={4} strokeLinecap="round" />
+                    <text x={148} y={4} fill="var(--text)">Your route (real line color)</text>
+                    <line x1={340} y1={0} x2={360} y2={0} stroke={GREY_LINE} strokeWidth={3} strokeLinecap="round" />
+                    <text x={366} y={4} fill="var(--muted)">Network</text>
                   </g>
                 </svg>
               </div>
