@@ -16,8 +16,10 @@ const ENDPOINT_RADIUS = 9;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.25;
-const GREY_LINE = '#c9d2e0';
-const GREY_STATION = '#aab4c6';
+const GREY_LINE = '#ccd5e3';
+const GREY_STATION = '#a9b4c8';
+const PANEL_BG = '#f6f9fd';
+const MAP_FONT = "'Manrope', sans-serif";
 
 const normalizeName = (n) => (n || '').trim().toUpperCase();
 
@@ -243,7 +245,16 @@ export default function Plan() {
                   width={mapGeometry.width * zoom}
                   height={mapGeometry.height * zoom}
                   viewBox={`0 0 ${mapGeometry.width} ${mapGeometry.height}`}
+                  fontFamily={MAP_FONT}
                 >
+                  <rect
+                    x={0}
+                    y={0}
+                    width={mapGeometry.width}
+                    height={mapGeometry.height}
+                    fill={PANEL_BG}
+                  />
+
                   {/* Grey context layer: the full network, de-emphasized */}
                   {mapData.lines.map((line) => {
                     const codes = mapData.stationsByLine[line.line_code] || [];
@@ -262,7 +273,7 @@ export default function Plan() {
                         points={points}
                         fill="none"
                         stroke={GREY_LINE}
-                        strokeWidth={2}
+                        strokeWidth={2.5}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
@@ -276,8 +287,10 @@ export default function Plan() {
                         key={s.station_code}
                         cx={x}
                         cy={y}
-                        r={s.interchange ? INTERCHANGE_RADIUS - 2 : STATION_RADIUS}
-                        fill={GREY_STATION}
+                        r={s.interchange ? INTERCHANGE_RADIUS - 1 : STATION_RADIUS}
+                        fill={s.interchange ? PANEL_BG : GREY_STATION}
+                        stroke={s.interchange ? GREY_STATION : 'none'}
+                        strokeWidth={s.interchange ? 2 : 0}
                       />
                     );
                   })}
@@ -299,7 +312,7 @@ export default function Plan() {
                         points={points}
                         fill="none"
                         stroke={seg.color}
-                        strokeWidth={4}
+                        strokeWidth={5}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
@@ -320,17 +333,21 @@ export default function Plan() {
                           r={s.interchange ? INTERCHANGE_RADIUS : ROUTE_STATION_RADIUS}
                           fill={s.interchange ? '#ffffff' : seg?.color || 'var(--text)'}
                           stroke={seg?.color || 'var(--text)'}
-                          strokeWidth={s.interchange ? 2.5 : 0}
+                          strokeWidth={s.interchange ? 3 : 1.5}
                         >
                           <title>{s.station_name}</title>
                         </circle>
                         {s.interchange && (
                           <text
                             x={x}
-                            y={y - INTERCHANGE_RADIUS - 4}
-                            fontSize="10"
+                            y={y - INTERCHANGE_RADIUS - 5}
+                            fontSize="11"
+                            fontWeight="600"
                             textAnchor="middle"
                             fill="var(--text)"
+                            stroke={PANEL_BG}
+                            strokeWidth={3}
+                            paintOrder="stroke"
                           >
                             {s.station_name}
                           </text>
@@ -349,22 +366,38 @@ export default function Plan() {
                     const { x, y } = mapGeometry.project(s);
                     return (
                       <g key={label}>
-                        <circle cx={x} cy={y} r={ENDPOINT_RADIUS} fill="#ffffff" stroke={ring} strokeWidth={3}>
+                        <circle cx={x} cy={y} r={ENDPOINT_RADIUS + 3} fill={ring} opacity={0.18} />
+                        <circle cx={x} cy={y} r={ENDPOINT_RADIUS} fill="#ffffff" stroke={ring} strokeWidth={3.5}>
                           <title>{`${label}: ${s.station_name}`}</title>
                         </circle>
                         <text
                           x={x}
-                          y={y - ENDPOINT_RADIUS - 5}
-                          fontSize="11"
+                          y={y - ENDPOINT_RADIUS - 6}
+                          fontSize="12"
                           fontWeight="700"
                           textAnchor="middle"
                           fill={ring}
+                          stroke={PANEL_BG}
+                          strokeWidth={3}
+                          paintOrder="stroke"
                         >
                           {label} • {s.station_name}
                         </text>
                       </g>
                     );
                   })}
+
+                  {/* Legend */}
+                  <g transform={`translate(${MAP_PADDING - 20}, ${MAP_PADDING - 20})`} fontSize="11">
+                    <circle cx={4} cy={0} r={5} fill="#ffffff" stroke="#1a9d5c" strokeWidth={3} />
+                    <text x={16} y={4} fill="var(--text)">Start</text>
+                    <circle cx={64} cy={0} r={5} fill="#ffffff" stroke="#c0392b" strokeWidth={3} />
+                    <text x={76} y={4} fill="var(--text)">End</text>
+                    <line x1={122} y1={0} x2={142} y2={0} stroke="var(--primary-strong)" strokeWidth={4} strokeLinecap="round" />
+                    <text x={148} y={4} fill="var(--text)">Your route</text>
+                    <line x1={222} y1={0} x2={242} y2={0} stroke={GREY_LINE} strokeWidth={3} strokeLinecap="round" />
+                    <text x={248} y={4} fill="var(--muted)">Network</text>
+                  </g>
                 </svg>
               </div>
             </div>
