@@ -153,7 +153,7 @@ export default function MetroMap() {
       {(view === 'dmrc' || view === 'nmrc') && (
         <div style={{ overflow: 'auto', border: '1px solid var(--line)', borderRadius: '12px', maxHeight: '70vh' }}>
           <img
-            src={view === 'dmrc' ? '/images/dmrc.jpg' : '/images/nmrc-aqua-network-map.jpg'}
+            src={view === 'dmrc' ? '/images/dmrc.jpg' : '/images/nmrc-aqua-network-map-full.jpg'}
             alt={view === 'dmrc' ? 'DMRC official network map' : 'NMRC Aqua Line network map'}
             style={{ display: 'block', width: `${zoom * 100}%`, maxWidth: 'none' }}
           />
