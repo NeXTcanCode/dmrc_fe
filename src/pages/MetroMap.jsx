@@ -13,7 +13,7 @@ const VIEWS = [
   { id: 'dmrc', label: 'DMRC' },
   { id: 'nmrc', label: 'NMRC' },
   { id: 'app', label: 'App View' },
-  { id: 'coords', label: 'Coordinates' },
+  // { id: 'coords', label: 'Coordinates' }, // commented out - real DMRC/NMRC map images cover this now
 ];
 
 export default function MetroMap() {
@@ -118,7 +118,7 @@ export default function MetroMap() {
           {view === 'dmrc' && "DMRC's official network map."}
           {view === 'nmrc' && "NMRC's official Aqua Line network map."}
           {view === 'app' && 'Every DMRC line, drawn as a station-order strip, sourced live.'}
-          {view === 'coords' && "DMRC's official layout, plotted from station coordinates."}
+          {/* {view === 'coords' && "DMRC's official layout, plotted from station coordinates."} */}
         </p>
       </div>
 
@@ -160,6 +160,7 @@ export default function MetroMap() {
         </div>
       )}
 
+      {/* "Coordinates" view - commented out, real DMRC/NMRC map images cover this now.
       {view === 'coords' && (
         <>
           {mapLoading && <p>Loading map coordinates...</p>}
@@ -227,6 +228,7 @@ export default function MetroMap() {
           )}
         </>
       )}
+      */}
 
       {view === 'app' && (
         <>
