@@ -108,6 +108,36 @@ export default function Plan() {
     return { segments, routeCodes, startCode, endCode };
   }, [journey, mapData, mapGeometry]);
 
+  // Crops the view to the traversed route's bounding box (+ padding) instead
+  // of the full network extent, so the route fills the frame instead of
+  // appearing as a tiny sliver on a mostly-empty canvas.
+  const FOCUS_PADDING = 90;
+  const MIN_FOCUS_SIZE = 260;
+  const viewBox = useMemo(() => {
+    if (!mapGeometry) return null;
+    if (!routeHighlight) {
+      return { x: 0, y: 0, w: mapGeometry.width, h: mapGeometry.height };
+    }
+
+    const points = [...routeHighlight.routeCodes]
+      .map((code) => mapGeometry.stationByCode[code])
+      .filter(Boolean)
+      .map((s) => mapGeometry.project(s));
+    if (!points.length) return { x: 0, y: 0, w: mapGeometry.width, h: mapGeometry.height };
+
+    const minX = Math.min(...points.map((p) => p.x));
+    const maxX = Math.max(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxY = Math.max(...points.map((p) => p.y));
+
+    const w = Math.max(MIN_FOCUS_SIZE, maxX - minX + FOCUS_PADDING * 2);
+    const h = Math.max(MIN_FOCUS_SIZE, maxY - minY + FOCUS_PADDING * 2);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+
+    return { x: cx - w / 2, y: cy - h / 2, w, h };
+  }, [mapGeometry, routeHighlight]);
+
   const zoomIn = () => setZoom((z) => Math.min(ZOOM_MAX, Number((z + ZOOM_STEP).toFixed(2))));
   const zoomOut = () => setZoom((z) => Math.max(ZOOM_MIN, Number((z - ZOOM_STEP).toFixed(2))));
   const zoomReset = () => setZoom(1);
@@ -217,7 +247,7 @@ export default function Plan() {
             )}
           </div>
 
-          {routeHighlight && mapGeometry && (
+          {routeHighlight && mapGeometry && viewBox && (
             <div style={{ marginTop: '14px' }}>
               <div
                 className="row actions"
@@ -242,16 +272,16 @@ export default function Plan() {
                 }}
               >
                 <svg
-                  width={mapGeometry.width * zoom}
-                  height={mapGeometry.height * zoom}
-                  viewBox={`0 0 ${mapGeometry.width} ${mapGeometry.height}`}
+                  width={viewBox.w * zoom}
+                  height={viewBox.h * zoom}
+                  viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
                   fontFamily={MAP_FONT}
                 >
                   <rect
-                    x={0}
-                    y={0}
-                    width={mapGeometry.width}
-                    height={mapGeometry.height}
+                    x={viewBox.x}
+                    y={viewBox.y}
+                    width={viewBox.w}
+                    height={viewBox.h}
                     fill={PANEL_BG}
                   />
 
@@ -388,7 +418,7 @@ export default function Plan() {
                   })}
 
                   {/* Legend */}
-                  <g transform={`translate(${MAP_PADDING - 20}, ${MAP_PADDING - 20})`} fontSize="11">
+                  <g transform={`translate(${viewBox.x + 20}, ${viewBox.y + 20})`} fontSize="11">
                     <rect x={-14} y={-16} width={450} height={32} rx={10} fill={PANEL_BG} opacity={0.92} />
                     <circle cx={4} cy={0} r={5} fill="#ffffff" stroke="#1a9d5c" strokeWidth={3} />
                     <text x={16} y={4} fill="var(--text)">Start</text>
