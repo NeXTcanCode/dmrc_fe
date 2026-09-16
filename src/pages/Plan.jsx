@@ -67,35 +67,78 @@ export default function Plan() {
     const nameToCode = Object.fromEntries(
       coords.map((s) => [normalizeName(s.station_name), s.station_code])
     );
-    const lineByLabel = Object.fromEntries(mapData.lines.map((l) => [l.line_color, l]));
+    // DMRC's display label (e.g. "Blue Line") isn't 1:1 with a single
+    // line_code - e.g. "Blue Line" covers both LN3 (main) and LN4 (the
+    // Yamuna Bank-Vaishali branch), joined at the Yamuna Bank interchange.
+    // Keep every line_code sharing a label so legs spanning that hidden
+    // sub-line boundary can still be resolved.
+    const linesByLabel = {};
+    for (const l of mapData.lines) {
+      (linesByLabel[l.line_color] ||= []).push(l);
+    }
 
-    return { stationByCode, nameToCode, lineByLabel, width, height, project };
+    return { stationByCode, nameToCode, linesByLabel, width, height, project };
   }, [mapData]);
 
   // Resolves each leg's real from/to stations against the line's ordered
   // station list, so the highlighted segment includes every intermediate
-  // station - not just the leg's two endpoints.
+  // station - not just the leg's two endpoints. Falls back to splitting the
+  // leg at a shared interchange when its endpoints sit on two different
+  // line_codes that share the same display label.
   const routeHighlight = useMemo(() => {
     if (!journey || !mapData || !mapGeometry) return null;
-    const { nameToCode, lineByLabel } = mapGeometry;
+    const { nameToCode, linesByLabel, stationByCode } = mapGeometry;
 
     const segments = [];
     for (const leg of journey.legs || []) {
-      const line = lineByLabel[leg.line_name];
+      const candidates = linesByLabel[leg.line_name] || [];
       const fromCodeLeg = nameToCode[normalizeName(leg.from_station)];
       const toCodeLeg = nameToCode[normalizeName(leg.to_station)];
-      if (!line || !fromCodeLeg || !toCodeLeg) continue;
+      if (!candidates.length || !fromCodeLeg || !toCodeLeg) continue;
 
-      const order = mapData.stationsByLine[line.line_code] || [];
-      const fromIdx = order.indexOf(fromCodeLeg);
-      const toIdx = order.indexOf(toCodeLeg);
-      if (fromIdx === -1 || toIdx === -1) continue;
+      const orderOf = (l) => mapData.stationsByLine[l.line_code] || [];
+      const directLine = candidates.find((l) => {
+        const order = orderOf(l);
+        return order.includes(fromCodeLeg) && order.includes(toCodeLeg);
+      });
 
-      const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+      if (directLine) {
+        const order = orderOf(directLine);
+        const fromIdx = order.indexOf(fromCodeLeg);
+        const toIdx = order.indexOf(toCodeLeg);
+        const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+        segments.push({
+          line_code: directLine.line_code,
+          color: directLine.primary_color_code,
+          codes: order.slice(lo, hi + 1),
+        });
+        continue;
+      }
+
+      const lineA = candidates.find((l) => orderOf(l).includes(fromCodeLeg));
+      const lineB = candidates.find((l) => orderOf(l).includes(toCodeLeg));
+      if (!lineA || !lineB) continue;
+      const orderA = orderOf(lineA);
+      const orderB = orderOf(lineB);
+      const junction = orderA.find((c) => orderB.includes(c) && stationByCode[c]?.interchange);
+      if (!junction) continue;
+
+      const fromIdx = orderA.indexOf(fromCodeLeg);
+      const jIdxA = orderA.indexOf(junction);
+      const [loA, hiA] = fromIdx <= jIdxA ? [fromIdx, jIdxA] : [jIdxA, fromIdx];
       segments.push({
-        line_code: line.line_code,
-        color: line.primary_color_code,
-        codes: order.slice(lo, hi + 1),
+        line_code: lineA.line_code,
+        color: lineA.primary_color_code,
+        codes: orderA.slice(loA, hiA + 1),
+      });
+
+      const jIdxB = orderB.indexOf(junction);
+      const toIdx = orderB.indexOf(toCodeLeg);
+      const [loB, hiB] = jIdxB <= toIdx ? [jIdxB, toIdx] : [toIdx, jIdxB];
+      segments.push({
+        line_code: lineB.line_code,
+        color: lineB.primary_color_code,
+        codes: orderB.slice(loB, hiB + 1),
       });
     }
     if (!segments.length) return null;
