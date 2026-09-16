@@ -1,12 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { stationOptions } from '../data/stations';
 import { DMRC_STATION_CODES } from '../data/dmrcStationCodes';
-import { planJourney } from '../services/metroService';
+import { getMapData, planJourney } from '../services/metroService';
 
 const plannableStations = stationOptions
   .filter((s) => DMRC_STATION_CODES[s.name])
   .sort((a, b) => a.name.localeCompare(b.name));
+
+const MAP_PADDING = 40;
+const STATION_RADIUS = 3;
+const INTERCHANGE_RADIUS = 6;
+const ROUTE_STATION_RADIUS = 5;
+const ENDPOINT_RADIUS = 9;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.25;
+const GREY_LINE = '#c9d2e0';
+const GREY_STATION = '#aab4c6';
+
+const normalizeName = (n) => (n || '').trim().toUpperCase();
 
 export default function Plan() {
   const [fromName, setFromName] = useState(plannableStations[0]?.name || '');
@@ -15,9 +28,87 @@ export default function Plan() {
   const [journey, setJourney] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [zoom, setZoom] = useState(1);
 
   const fromCode = useMemo(() => DMRC_STATION_CODES[fromName], [fromName]);
   const toCode = useMemo(() => DMRC_STATION_CODES[toName], [toName]);
+
+  const [mapData, setMapData] = useState(null);
+
+  useEffect(() => {
+    getMapData()
+      .then(setMapData)
+      .catch(() => setMapData(null));
+  }, []);
+
+  const mapGeometry = useMemo(() => {
+    if (!mapData) return null;
+    const stationByCode = Object.fromEntries(
+      mapData.stations
+        .filter((s) => typeof s.x_coords === 'number' && typeof s.y_coords === 'number')
+        .map((s) => [s.station_code, s])
+    );
+    const coords = Object.values(stationByCode);
+    if (!coords.length) return null;
+
+    const minX = Math.min(...coords.map((s) => s.x_coords));
+    const maxX = Math.max(...coords.map((s) => s.x_coords));
+    const minY = Math.min(...coords.map((s) => s.y_coords));
+    const maxY = Math.max(...coords.map((s) => s.y_coords));
+
+    const width = maxX - minX + MAP_PADDING * 2;
+    const height = maxY - minY + MAP_PADDING * 2;
+    const project = (s) => ({
+      x: s.x_coords - minX + MAP_PADDING,
+      y: s.y_coords - minY + MAP_PADDING,
+    });
+    const nameToCode = Object.fromEntries(
+      coords.map((s) => [normalizeName(s.station_name), s.station_code])
+    );
+    const lineByLabel = Object.fromEntries(mapData.lines.map((l) => [l.line_color, l]));
+
+    return { stationByCode, nameToCode, lineByLabel, width, height, project };
+  }, [mapData]);
+
+  // Resolves each leg's real from/to stations against the line's ordered
+  // station list, so the highlighted segment includes every intermediate
+  // station - not just the leg's two endpoints.
+  const routeHighlight = useMemo(() => {
+    if (!journey || !mapData || !mapGeometry) return null;
+    const { nameToCode, lineByLabel } = mapGeometry;
+
+    const segments = [];
+    for (const leg of journey.legs || []) {
+      const line = lineByLabel[leg.line_name];
+      const fromCodeLeg = nameToCode[normalizeName(leg.from_station)];
+      const toCodeLeg = nameToCode[normalizeName(leg.to_station)];
+      if (!line || !fromCodeLeg || !toCodeLeg) continue;
+
+      const order = mapData.stationsByLine[line.line_code] || [];
+      const fromIdx = order.indexOf(fromCodeLeg);
+      const toIdx = order.indexOf(toCodeLeg);
+      if (fromIdx === -1 || toIdx === -1) continue;
+
+      const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+      segments.push({
+        line_code: line.line_code,
+        color: line.primary_color_code,
+        codes: order.slice(lo, hi + 1),
+      });
+    }
+    if (!segments.length) return null;
+
+    const routeCodes = new Set(segments.flatMap((s) => s.codes));
+    const startCode = nameToCode[normalizeName(journey.from)] || segments[0]?.codes[0];
+    const endCode =
+      nameToCode[normalizeName(journey.to)] || segments[segments.length - 1]?.codes.slice(-1)[0];
+
+    return { segments, routeCodes, startCode, endCode };
+  }, [journey, mapData, mapGeometry]);
+
+  const zoomIn = () => setZoom((z) => Math.min(ZOOM_MAX, Number((z + ZOOM_STEP).toFixed(2))));
+  const zoomOut = () => setZoom((z) => Math.max(ZOOM_MIN, Number((z - ZOOM_STEP).toFixed(2))));
+  const zoomReset = () => setZoom(1);
 
   const onPlan = async (e) => {
     e.preventDefault();
@@ -29,6 +120,7 @@ export default function Plan() {
     setLoading(true);
     setError('');
     setJourney(null);
+    setZoom(1);
     try {
       const data = await planJourney(fromCode, toCode, strategy);
       setJourney(data);
@@ -122,6 +214,161 @@ export default function Plan() {
               </div>
             )}
           </div>
+
+          {routeHighlight && mapGeometry && (
+            <div style={{ marginTop: '14px' }}>
+              <div
+                className="row actions"
+                style={{ marginBottom: '10px', justifyContent: 'flex-end', gap: '8px' }}
+              >
+                <button className="secondary" onClick={zoomOut} disabled={zoom <= ZOOM_MIN}>
+                  −
+                </button>
+                <button className="secondary" onClick={zoomReset} style={{ minWidth: '64px' }}>
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button className="secondary" onClick={zoomIn} disabled={zoom >= ZOOM_MAX}>
+                  +
+                </button>
+              </div>
+              <div
+                style={{
+                  overflow: 'auto',
+                  border: '1px solid var(--line)',
+                  borderRadius: '12px',
+                  maxHeight: '70vh',
+                }}
+              >
+                <svg
+                  width={mapGeometry.width * zoom}
+                  height={mapGeometry.height * zoom}
+                  viewBox={`0 0 ${mapGeometry.width} ${mapGeometry.height}`}
+                >
+                  {/* Grey context layer: the full network, de-emphasized */}
+                  {mapData.lines.map((line) => {
+                    const codes = mapData.stationsByLine[line.line_code] || [];
+                    const points = codes
+                      .map((code) => mapGeometry.stationByCode[code])
+                      .filter(Boolean)
+                      .map((s) => {
+                        const { x, y } = mapGeometry.project(s);
+                        return `${x},${y}`;
+                      })
+                      .join(' ');
+                    if (!points) return null;
+                    return (
+                      <polyline
+                        key={line.line_code}
+                        points={points}
+                        fill="none"
+                        stroke={GREY_LINE}
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    );
+                  })}
+                  {Object.values(mapGeometry.stationByCode).map((s) => {
+                    if (routeHighlight.routeCodes.has(s.station_code)) return null;
+                    const { x, y } = mapGeometry.project(s);
+                    return (
+                      <circle
+                        key={s.station_code}
+                        cx={x}
+                        cy={y}
+                        r={s.interchange ? INTERCHANGE_RADIUS - 2 : STATION_RADIUS}
+                        fill={GREY_STATION}
+                      />
+                    );
+                  })}
+
+                  {/* Highlight layer: the traversed path only */}
+                  {routeHighlight.segments.map((seg, idx) => {
+                    const points = seg.codes
+                      .map((code) => mapGeometry.stationByCode[code])
+                      .filter(Boolean)
+                      .map((s) => {
+                        const { x, y } = mapGeometry.project(s);
+                        return `${x},${y}`;
+                      })
+                      .join(' ');
+                    if (!points) return null;
+                    return (
+                      <polyline
+                        key={idx}
+                        points={points}
+                        fill="none"
+                        stroke={seg.color}
+                        strokeWidth={4}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    );
+                  })}
+                  {[...routeHighlight.routeCodes].map((code) => {
+                    const s = mapGeometry.stationByCode[code];
+                    if (!s) return null;
+                    const isEndpoint = code === routeHighlight.startCode || code === routeHighlight.endCode;
+                    if (isEndpoint) return null;
+                    const { x, y } = mapGeometry.project(s);
+                    const seg = routeHighlight.segments.find((sg) => sg.codes.includes(code));
+                    return (
+                      <g key={code}>
+                        <circle
+                          cx={x}
+                          cy={y}
+                          r={s.interchange ? INTERCHANGE_RADIUS : ROUTE_STATION_RADIUS}
+                          fill={s.interchange ? '#ffffff' : seg?.color || 'var(--text)'}
+                          stroke={seg?.color || 'var(--text)'}
+                          strokeWidth={s.interchange ? 2.5 : 0}
+                        >
+                          <title>{s.station_name}</title>
+                        </circle>
+                        {s.interchange && (
+                          <text
+                            x={x}
+                            y={y - INTERCHANGE_RADIUS - 4}
+                            fontSize="10"
+                            textAnchor="middle"
+                            fill="var(--text)"
+                          >
+                            {s.station_name}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
+
+                  {/* Endpoint markers, drawn last so they sit on top */}
+                  {[
+                    { code: routeHighlight.startCode, ring: '#1a9d5c', label: 'Start' },
+                    { code: routeHighlight.endCode, ring: '#c0392b', label: 'End' },
+                  ].map(({ code, ring, label }) => {
+                    const s = mapGeometry.stationByCode[code];
+                    if (!s) return null;
+                    const { x, y } = mapGeometry.project(s);
+                    return (
+                      <g key={label}>
+                        <circle cx={x} cy={y} r={ENDPOINT_RADIUS} fill="#ffffff" stroke={ring} strokeWidth={3}>
+                          <title>{`${label}: ${s.station_name}`}</title>
+                        </circle>
+                        <text
+                          x={x}
+                          y={y - ENDPOINT_RADIUS - 5}
+                          fontSize="11"
+                          fontWeight="700"
+                          textAnchor="middle"
+                          fill={ring}
+                        >
+                          {label} • {s.station_name}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </motion.section>
