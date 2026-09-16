@@ -27,6 +27,11 @@ export const planJourney = async (fromCode, toCode, strategy = 'least-distance')
   return data;
 };
 
+export const getMapData = async () => {
+  const { data } = await api.get('/metro/map');
+  return data;
+};
+
 export const getNotifications = async () => {
   const { data } = await api.get('/metro/notifications');
   return data;
