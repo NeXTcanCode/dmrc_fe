@@ -76,7 +76,22 @@ function loadTravel() {
 // Rolling log of raw GPS fixes so real rides can be exported and used to tune thresholds.
 const LOG_KEY = 'dmrc.gpsLog';
 const LOG_MAX = 1500;
+
+// Debug tools are off for normal users. Turn on with ?debug=1 in the URL (remembered
+// in this browser) or ?debug=0 to turn off; always on in the dev server.
+export const isDebugEnabled = () => {
+  try {
+    const param = new URLSearchParams(window.location.search).get('debug');
+    if (param === '1') localStorage.setItem('dmrc.debug', '1');
+    if (param === '0') localStorage.removeItem('dmrc.debug');
+    return import.meta.env.DEV || localStorage.getItem('dmrc.debug') === '1';
+  } catch {
+    return false;
+  }
+};
+
 const logFix = (position, phase) => {
+  if (!isDebugEnabled()) return;
   try {
     const log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
     log.push({
