@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchTrips, removeTrip } from '../features/tripsSlice';
+import { clearTripHistory } from '../services/tripsService';
 import { stationOptions } from '../data/stations';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -25,6 +26,19 @@ export default function History() {
     }
   };
 
+  const onClearAll = async () => {
+    if (!window.confirm('Clear all trip history? Pending trips are kept.')) return;
+    setError('');
+    try {
+      await clearTripHistory();
+      await dispatch(fetchTrips()).unwrap();
+    } catch (e) {
+      setError(e?.response?.data?.message || e?.message || 'Failed to clear history');
+    }
+  };
+
+  const hasClearable = trips.some((t) => t.status !== 'pending');
+
   return (
     <motion.section
       className="card"
@@ -35,6 +49,9 @@ export default function History() {
       <div className="section-head">
         <h2>Trip History</h2>
         <p>Review pending, confirmed and auto-confirmed trips.</p>
+        {hasClearable && (
+          <button className="danger" onClick={onClearAll}>Clear All History</button>
+        )}
       </div>
 
       {trips.length === 0 && <p>No trips found.</p>}

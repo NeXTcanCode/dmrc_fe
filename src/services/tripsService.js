@@ -19,3 +19,8 @@ export const deleteTrip = async (id) => {
   const { data } = await api.delete(`/trips/${id}`);
   return data;
 };
+
+export const clearTripHistory = async () => {
+  const { data } = await api.delete('/trips');
+  return data;
+};
