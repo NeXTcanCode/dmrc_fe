@@ -143,8 +143,11 @@ const messageFor = (event) => {
   switch (event.type) {
     case 'poor_fix':
       return `Waiting for a better GPS fix (accuracy ±${Math.round(event.accuracy)}m)...`;
-    case 'moving':
-      return `Moving. Nearest station: ${event.nearest.station.name} (${Math.round(event.nearest.meters)}m)`;
+    case 'moving': {
+      const m = Math.round(event.nearest.meters);
+      const dist = m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
+      return `Monitoring on. Not at a station yet - ${event.nearest.station.name} is ${dist} away. Trip capture starts when you reach a station.`;
+    }
     case 'boarding':
       return `At ${event.station.name}. Trip starts once you leave the station.`;
     case 'at_station':
