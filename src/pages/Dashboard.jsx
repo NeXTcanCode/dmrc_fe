@@ -776,6 +776,11 @@ export default function Dashboard() {
                 (For missed trips or when location is unavailable.)
               </span>
             </h2>
+            {!geoUnavailable && !locationDenied && (
+              <button className="secondary" onClick={() => setManualOpen(false)}>
+                Back
+              </button>
+            )}
           </div>
 
           <div className="row actions manual-grid">
