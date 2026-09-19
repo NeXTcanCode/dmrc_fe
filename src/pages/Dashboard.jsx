@@ -75,7 +75,7 @@ export default function Dashboard() {
   const dispatch = useDispatch();
   const wallet = useSelector((state) => state.wallet);
   const trips = useSelector((state) => state.trips.items);
-  const { active: monitoring, message: monitorMessage } = useSelector(
+  const { active: monitoring, message: monitorMessage, journey } = useSelector(
     (state) => state.monitoring
   );
 
@@ -464,6 +464,29 @@ export default function Dashboard() {
         </div>
         <div className="monitor-row">
           <p className="monitor-line">{monitorMessage}</p>
+          {journey && (
+            <div className="journey-info">
+              <p>
+                <span className="line-dot" style={{ background: journey.lineColor }} />
+                {journey.lineName} towards {journey.toward}
+              </p>
+              <p>{journey.atTerminus ? "Last station" : "Next station"}: <strong>{journey.next}</strong></p>
+              {journey.interchange && (
+                <p>
+                  Upcoming interchange: <strong>{journey.interchange.name}</strong>
+                  {journey.interchange.stopsAway > 0 && ` (${journey.interchange.stopsAway} stops after next)`}
+                  {journey.interchange.lines.length > 0 && " - change for "}
+                  {journey.interchange.lines.map((l, i) => (
+                    <span key={l.name}>
+                      {i > 0 && ", "}
+                      <span className="line-dot" style={{ background: l.color }} />
+                      {l.name}
+                    </span>
+                  ))}
+                </p>
+              )}
+            </div>
+          )}
           <div className="row actions monitor-actions">
             {!monitoring && (
               <button onClick={startMonitoring}>Enable Monitoring</button>

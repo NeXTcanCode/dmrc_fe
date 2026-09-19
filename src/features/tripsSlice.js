@@ -3,7 +3,14 @@ import { confirmTrip, createPendingTrip, deleteTrip, getTrips } from '../service
 
 export const fetchTrips = createAsyncThunk('trips/fetch', async () => getTrips());
 export const addPendingTrip = createAsyncThunk('trips/addPending', async (payload) => createPendingTrip(payload));
-export const markTripConfirmed = createAsyncThunk('trips/confirm', async (id) => confirmTrip(id));
+export const markTripConfirmed = createAsyncThunk('trips/confirm', async (id) => {
+  try {
+    return await confirmTrip(id);
+  } catch (e) {
+    // keep the server's message (e.g. insufficient balance) through the thunk's error serialisation
+    throw new Error(e?.response?.data?.message || e?.message || 'Failed to confirm trip');
+  }
+});
 export const removeTrip = createAsyncThunk('trips/remove', async (id) => {
   await deleteTrip(id);
   return id;

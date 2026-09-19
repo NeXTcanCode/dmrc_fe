@@ -4,7 +4,8 @@ const monitoringSlice = createSlice({
   name: 'monitoring',
   initialState: {
     active: false,
-    message: 'Travel monitoring is off'
+    message: 'Travel monitoring is off',
+    journey: null // { lineName, lineColor, toward, next, interchange } while riding
   },
   reducers: {
     monitoringStarted(state) {
@@ -14,6 +15,10 @@ const monitoringSlice = createSlice({
     monitoringStopped(state) {
       state.active = false;
       state.message = 'Travel monitoring is off';
+      state.journey = null;
+    },
+    journeySet(state, action) {
+      state.journey = action.payload;
     },
     monitoringMessageSet(state, action) {
       state.message = action.payload;
@@ -21,5 +26,5 @@ const monitoringSlice = createSlice({
   }
 });
 
-export const { monitoringStarted, monitoringStopped, monitoringMessageSet } = monitoringSlice.actions;
+export const { monitoringStarted, monitoringStopped, monitoringMessageSet, journeySet } = monitoringSlice.actions;
 export default monitoringSlice.reducer;

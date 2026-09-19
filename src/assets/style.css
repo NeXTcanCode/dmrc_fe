@@ -616,3 +616,7 @@ button:disabled {
     min-width: 50%;
   }
 }
+
+.journey-info { margin-top: 8px; font-size: 0.9rem; }
+.journey-info p { margin: 2px 0; }
+.line-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }

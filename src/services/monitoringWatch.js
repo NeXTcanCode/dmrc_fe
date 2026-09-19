@@ -1,127 +1,202 @@
-import { geoStations } from '../data/stations';
+import { trackedStations } from '../data/trackedStations';
 import { addPendingTrip } from '../features/tripsSlice';
 import { fetchTrips } from '../features/tripsSlice';
 import { fetchWallet } from '../features/walletSlice';
 import {
+  journeySet,
   monitoringMessageSet,
   monitoringStarted,
   monitoringStopped
 } from '../features/monitoringSlice';
-import { distanceInMeters, findNearestStation } from './geolocationService';
+import { DMRC_STATION_CODES } from '../data/dmrcStationCodes';
+import { getLines, getLineStations, planJourney } from './metroService';
+import { buildNetwork, inferLine, progressOnLine } from './journeyProgress';
+import { initialTravelState, step } from './travelTracker';
 
-const STATION_RADIUS_M = 120;
-const MIN_TRAVEL_MINUTES = 5;
-const MAX_ACCEPTABLE_ACCURACY_M = 100;
+const TRIP_COOLDOWN_MS = 120000;
+const TICK_MS = 15000;
+const STORAGE_KEY = 'dmrc.travelState';
 
 // Module-level singleton: the watch and travel progress must survive
 // Dashboard unmounting when the user switches tabs, so they can't live in
 // component state/refs - only the on/off flag and status message go to Redux.
 let watchId = null;
-let travelState = {
-  boardedStation: null,
-  boardedAt: null,
-  lastCreatedAt: 0
+let tickId = null;
+let travel = loadTravel();
+let lastCreatedAt = 0;
+let interchangeCodes = new Set();
+let network = null;
+// Which line/direction the rider is on; re-inferred after each interchange.
+let ride = { originCode: null, line: null };
+
+const coordsByCode = Object.fromEntries(
+  trackedStations.filter((s) => s.code).map((s) => [s.code, { lat: s.lat, lng: s.lng }])
+);
+
+const codeOf = (station) => station.code || DMRC_STATION_CODES[station.name];
+const isInterchange = (station) => interchangeCodes.has(codeOf(station));
+
+// Interchange flags come from the live line data; if it can't be loaded the
+// tracker simply behaves as if no station is an interchange.
+const loadInterchangeCodes = async () => {
+  try {
+    const lines = await getLines();
+    const perLine = await Promise.all(
+      (Array.isArray(lines) ? lines : lines?.lines || []).map((l) =>
+        getLineStations(l.line_code).catch(() => [])
+      )
+    );
+    const codes = new Set();
+    perLine.flat().forEach((s) => {
+      if (s?.interchange && s.station_code) codes.add(s.station_code);
+    });
+    interchangeCodes = codes;
+    const stationsByLine = {};
+    const lineList = Array.isArray(lines) ? lines : lines?.lines || [];
+    lineList.forEach((l, i) => {
+      stationsByLine[l.line_code] = perLine[i] || [];
+    });
+    network = buildNetwork(lineList, stationsByLine, coordsByCode);
+  } catch {
+    // keep whatever we had
+  }
 };
 
-const handlePosition = async (dispatch, position) => {
-  const accuracy = position.coords.accuracy;
-  if (typeof accuracy === 'number' && accuracy > MAX_ACCEPTABLE_ACCURACY_M) {
-    dispatch(
-      monitoringMessageSet(
-        `Waiting for a better GPS fix (accuracy ±${Math.round(accuracy)}m)...`
-      )
-    );
-    return;
+function loadTravel() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? { ...initialTravelState, ...JSON.parse(raw) } : { ...initialTravelState };
+  } catch {
+    return { ...initialTravelState };
   }
+}
 
-  const coords = {
-    lat: position.coords.latitude,
-    lng: position.coords.longitude
-  };
-  const nearest = findNearestStation(coords, geoStations);
-  if (!nearest) return;
-
-  if (nearest.meters > STATION_RADIUS_M) {
-    dispatch(
-      monitoringMessageSet(
-        `Moving. Nearest station: ${nearest.station.name} (${Math.round(nearest.meters)}m)`
-      )
-    );
-    return;
+const saveTravel = () => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(travel));
+  } catch {
+    // storage unavailable - tracking still works for this session
   }
+};
 
+const messageFor = (event) => {
+  switch (event.type) {
+    case 'poor_fix':
+      return `Waiting for a better GPS fix (accuracy ±${Math.round(event.accuracy)}m)...`;
+    case 'moving':
+      return `Moving. Nearest station: ${event.nearest.station.name} (${Math.round(event.nearest.meters)}m)`;
+    case 'boarding':
+      return `At ${event.station.name}. Trip starts once you leave the station.`;
+    case 'at_station':
+      return `Still at ${event.station.name}. Monitoring continues.`;
+    case 'signal_lost':
+      return `Signal lost - travelling from ${event.from.name}. Fare will be added when signal returns.`;
+    case 'in_transit':
+      return `Travelling from ${event.from.name}...`;
+    case 'interchange':
+      return `At interchange ${event.at.name}. Continue your ride - one trip will be recorded when you finish.`;
+    case 'rejected':
+      return `Ignored ${event.from.name} to ${event.to.name}: movement did not look like a metro ride.`;
+    default:
+      return null;
+  }
+};
+
+// Real route distance from the DMRC planner; null lets the caller fall back
+// to the straight-line distance between the two stations.
+const routeDistanceKm = async (from, to) => {
+  const fromCode = codeOf(from);
+  const toCode = codeOf(to);
+  if (!fromCode || !toCode || fromCode === toCode) return null;
+  try {
+    const data = await planJourney(fromCode, toCode, 'least-distance');
+    const km = data?.total_distance_km;
+    return typeof km === 'number' && km > 0 ? km : null;
+  } catch {
+    return null;
+  }
+};
+
+const createTrip = async (dispatch, from, to, meters) => {
   const now = Date.now();
-
-  if (!travelState.boardedStation) {
-    travelState.boardedStation = nearest.station;
-    travelState.boardedAt = now;
-    dispatch(
-      monitoringMessageSet(
-        `Boarding detected at ${nearest.station.name}. Waiting for destination...`
-      )
-    );
-    return;
-  }
-
-  if (travelState.boardedStation.id === nearest.station.id) {
-    dispatch(
-      monitoringMessageSet(`Still at ${nearest.station.name}. Monitoring continues.`)
-    );
-    return;
-  }
-
-  const tripMinutes = (now - travelState.boardedAt) / 60000;
-  if (tripMinutes < MIN_TRAVEL_MINUTES) {
-    dispatch(
-      monitoringMessageSet(
-        `Detected ${nearest.station.name}. Waiting minimum ${MIN_TRAVEL_MINUTES} min trip window.`
-      )
-    );
-    return;
-  }
-
-  if (now - travelState.lastCreatedAt < 120000) return;
-
-  // Reserve the cooldown before the request goes out, not after it resolves,
-  // so a second watchPosition update while the request is in flight can't
-  // also pass the cooldown check and create a duplicate pending trip.
-  travelState.lastCreatedAt = now;
-
-  const meters = distanceInMeters(travelState.boardedStation, nearest.station);
-  const distanceKmAuto = Math.max(1, Number((meters / 1000).toFixed(1)));
-  const fromStationName = travelState.boardedStation.name;
-  const toStationName = nearest.station.name;
+  if (now - lastCreatedAt < TRIP_COOLDOWN_MS) return;
+  // Reserve the cooldown before the request goes out so a second update
+  // while it is in flight can't create a duplicate pending trip.
+  lastCreatedAt = now;
 
   try {
+    const routeKm = await routeDistanceKm(from, to);
+    const distanceKmAuto = Math.max(1, Number((routeKm ?? meters / 1000).toFixed(1)));
     await dispatch(
       addPendingTrip({
-        boardingStationId: travelState.boardedStation.id,
-        alightingStationId: nearest.station.id,
-        boardingStationName: fromStationName,
-        alightingStationName: toStationName,
+        boardingStationId: from.id,
+        alightingStationId: to.id,
+        boardingStationName: from.name,
+        alightingStationName: to.name,
         distanceKm: distanceKmAuto,
         isSmartCard: true,
         travelDate: new Date().toISOString()
       })
     ).unwrap();
-
-    travelState.boardedStation = nearest.station;
-    travelState.boardedAt = now;
-
     dispatch(
-      monitoringMessageSet(
-        `Trip captured: ${distanceKmAuto} km from ${fromStationName} to ${toStationName}.`
-      )
+      monitoringMessageSet(`Trip captured: ${distanceKmAuto} km from ${from.name} to ${to.name}.`)
     );
     await Promise.all([dispatch(fetchWallet()).unwrap(), dispatch(fetchTrips()).unwrap()]);
   } catch (e) {
-    travelState.lastCreatedAt = 0; // release the reservation so the next detection can retry
+    lastCreatedAt = 0; // release the reservation so a later detection can retry
     dispatch(
       monitoringMessageSet(
         e?.response?.data?.message || e?.message || 'Auto trip creation failed'
       )
     );
   }
+};
+
+const updateJourney = (dispatch, fix, event) => {
+  if (!network) return;
+  if (travel.phase === 'interchange_wait' && event.type === 'interchange') {
+    // Changing trains: the next leg starts from this station on an unknown line.
+    ride = { originCode: codeOf(event.at), line: null };
+    dispatch(journeySet(null));
+    return;
+  }
+  if (travel.phase !== 'in_transit' || !fix) {
+    if (travel.phase === 'idle' || travel.phase === 'at_station') {
+      ride = { originCode: null, line: null };
+      dispatch(journeySet(null));
+    }
+    return;
+  }
+  const originCode = ride.originCode || codeOf(travel.station);
+  if (ride.originCode !== originCode) ride = { originCode, line: null };
+  if (!ride.line) ride.line = inferLine(network, originCode, fix);
+  if (!ride.line) return;
+  const p = progressOnLine(network, ride.line.lineCode, ride.line.dir, originCode, fix);
+  if (p) dispatch(journeySet(p));
+};
+
+const advance = (dispatch, fix) => {
+  const { state, event } = step(travel, fix, Date.now(), trackedStations, isInterchange);
+  const changed = state.phase !== travel.phase;
+  travel = state;
+  if (changed || fix) saveTravel();
+
+  updateJourney(dispatch, fix, event);
+
+  if (event.type === 'trip') {
+    return createTrip(dispatch, event.from, event.to, event.meters);
+  }
+  const msg = messageFor(event);
+  if (msg) dispatch(monitoringMessageSet(msg));
+};
+
+const handlePosition = async (dispatch, position) => {
+  await advance(dispatch, {
+    lat: position.coords.latitude,
+    lng: position.coords.longitude,
+    accuracy: position.coords.accuracy,
+    speed: position.coords.speed
+  });
 };
 
 export const isMonitoringActive = () => watchId !== null;
@@ -132,6 +207,7 @@ export const startMonitoringWatch = (dispatch) => {
     return;
   }
   if (watchId !== null) return;
+  loadInterchangeCodes();
 
   watchId = navigator.geolocation.watchPosition(
     (position) =>
@@ -142,6 +218,8 @@ export const startMonitoringWatch = (dispatch) => {
       dispatch(monitoringMessageSet(geoError.message || 'Unable to read location')),
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
   );
+  // watchPosition goes silent underground, so a timer detects the gap.
+  tickId = setInterval(() => advance(dispatch, null), TICK_MS);
 
   dispatch(monitoringStarted());
 };
@@ -151,6 +229,12 @@ export const stopMonitoringWatch = (dispatch) => {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
   }
-  travelState = { boardedStation: null, boardedAt: null, lastCreatedAt: 0 };
+  if (tickId !== null) {
+    clearInterval(tickId);
+    tickId = null;
+  }
+  travel = { ...initialTravelState };
+  lastCreatedAt = 0;
+  saveTravel();
   dispatch(monitoringStopped());
 };
