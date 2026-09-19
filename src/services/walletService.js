@@ -19,3 +19,8 @@ export const debitWallet = async (amount) => {
   const { data } = await api.post('/wallet/debit', { amount });
   return data;
 };
+
+export const correctWalletBalance = async (balance) => {
+  const { data } = await api.post('/wallet/correct', { balance });
+  return data;
+};

@@ -9,6 +9,7 @@ export const DWELL_MS = 45000;
 export const MAX_SPEED_MS = 80 / 3.6;
 export const MIN_AVG_SPEED_MS = 10 / 3.6;
 export const INTERCHANGE_WAIT_MS = 15 * 60000;
+export const MAX_RIDE_MS = 5 * 60 * 60000;
 const DWELL_MAX_SPEED_MS = 2;
 
 export const initialTravelState = {
@@ -44,12 +45,21 @@ const enterTransit = (state, leftAt) => ({
 
 // Pure state machine. `fix` is null for a timer tick with no GPS update.
 // Returns { state, event } where event is one of:
-// idle | poor_fix | moving | boarding | at_station | signal_lost | in_transit | interchange | trip | rejected
+// idle | poor_fix | moving | boarding | at_station | signal_lost | in_transit | interchange | trip | rejected | stale_ride
 // `isInterchange(station)` marks stations where the user may change trains; arriving
 // there holds the trip until the ride ends, so a ride with a change of trains is
 // recorded as one trip from the boarding station to the final station. The route
 // through the interchange comes from the journey planner, not from this file.
 export const step = (state, fix, now, stations, isInterchange = () => false) => {
+  // A ride whose arrival was never seen must not be ended by a much later fix.
+  const rideStart = state.phase === 'in_transit' ? state.leftAt : state.phase === 'interchange_wait' ? state.leftAt ?? state.viaAt : null;
+  if (rideStart != null && now - rideStart > MAX_RIDE_MS) {
+    return {
+      state: { ...initialTravelState },
+      event: { type: 'stale_ride', from: state.station, leftAt: rideStart }
+    };
+  }
+
   if (!fix) {
     if (state.phase === 'interchange_wait' && now - state.viaAt > INTERCHANGE_WAIT_MS) {
       return {

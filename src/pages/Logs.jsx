@@ -155,7 +155,12 @@ export default function Logs() {
                       {isRecharge ? "+" : "-"} INR {item.amount}
                     </strong>
                     <p className="log-meta">
-                      {isRecharge ? "Recharge" : "Deduction"} •{" "}
+                      {item.note === "balance_correction"
+                        ? "Balance correction"
+                        : isRecharge
+                        ? "Recharge"
+                        : "Deduction"}{" "}
+                      •{" "}
                       {dayjs(item.createdAt).format("DD MMM YYYY, hh:mm A")}
                     </p>
                   </div>

@@ -4,6 +4,8 @@ import { fetchTrips } from '../features/tripsSlice';
 import { fetchWallet } from '../features/walletSlice';
 import {
   journeySet,
+  missedRideCleared,
+  missedRideSet,
   monitoringMessageSet,
   monitoringStarted,
   monitoringStopped,
@@ -12,7 +14,7 @@ import {
 import { DMRC_STATION_CODES } from '../data/dmrcStationCodes';
 import { getLines, getLineStations, planJourney } from './metroService';
 import { buildNetwork, inferLine, progressOnLine } from './journeyProgress';
-import { findNearestStation } from './geolocationService';
+import { distanceInMeters, findNearestStation } from './geolocationService';
 import { initialTravelState, step } from './travelTracker';
 
 const TRIP_COOLDOWN_MS = 120000;
@@ -153,6 +155,8 @@ const messageFor = (event) => {
       return `Travelling from ${event.from.name}...`;
     case 'interchange':
       return `At interchange ${event.at.name}. Continue your ride - one trip will be recorded when you finish.`;
+    case 'stale_ride':
+      return `Ride from ${event.from.name} was not completed - tell us where you got off.`;
     case 'rejected':
       return `Ignored ${event.from.name} to ${event.to.name}: movement did not look like a metro ride.`;
     default:
@@ -177,7 +181,7 @@ const routeDistanceKm = async (from, to) => {
 
 const createTrip = async (dispatch, from, to, meters) => {
   const now = Date.now();
-  if (now - lastCreatedAt < TRIP_COOLDOWN_MS) return;
+  if (now - lastCreatedAt < TRIP_COOLDOWN_MS) return false;
   // Reserve the cooldown before the request goes out so a second update
   // while it is in flight can't create a duplicate pending trip.
   lastCreatedAt = now;
@@ -200,6 +204,7 @@ const createTrip = async (dispatch, from, to, meters) => {
       monitoringMessageSet(`Trip captured: ${distanceKmAuto} km from ${from.name} to ${to.name}.`)
     );
     await Promise.all([dispatch(fetchWallet()).unwrap(), dispatch(fetchTrips()).unwrap()]);
+    return true;
   } catch (e) {
     lastCreatedAt = 0; // release the reservation so a later detection can retry
     dispatch(
@@ -207,6 +212,7 @@ const createTrip = async (dispatch, from, to, meters) => {
         e?.response?.data?.message || e?.message || 'Auto trip creation failed'
       )
     );
+    return false;
   }
 };
 
@@ -241,6 +247,15 @@ const advance = (dispatch, fix) => {
 
   updateJourney(dispatch, fix, event);
 
+  if (event.type === 'stale_ride') {
+    dispatch(
+      missedRideSet({
+        from: { id: event.from.id, name: event.from.name },
+        leftAt: event.leftAt
+      })
+    );
+  }
+
   if (event.type === 'trip') {
     return createTrip(dispatch, event.from, event.to, event.meters);
   }
@@ -265,6 +280,18 @@ const handlePosition = async (dispatch, position) => {
     accuracy: position.coords.accuracy,
     speed: position.coords.speed
   });
+};
+
+// The user says where they got off a ride the tracker never saw finish.
+export const createMissedTrip = async (dispatch, fromId, toId) => {
+  const from = trackedStations.find((s) => s.id === fromId);
+  const to = trackedStations.find((s) => s.id === toId);
+  if (!from || !to) throw new Error('Station not found');
+  if (from.id === to.id) throw new Error('Boarding and exit stations cannot be the same');
+  lastCreatedAt = 0; // an explicit user action must not be blocked by the auto-capture cooldown
+  const created = await createTrip(dispatch, from, to, distanceInMeters(from, to));
+  if (created) dispatch(missedRideCleared());
+  return created;
 };
 
 export const isMonitoringActive = () => watchId !== null;

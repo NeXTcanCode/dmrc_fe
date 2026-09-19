@@ -1,9 +1,10 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import { debitWallet, getWallet, rechargeWallet, updateWallet } from '../services/walletService';
+import { correctWalletBalance, debitWallet, getWallet, rechargeWallet, updateWallet } from '../services/walletService';
 
 export const fetchWallet = createAsyncThunk('wallet/fetch', async () => getWallet());
 export const saveWallet = createAsyncThunk('wallet/save', async (balance) => updateWallet(balance));
 export const addRecharge = createAsyncThunk('wallet/recharge', async ({ amount, mode }) => rechargeWallet(amount, mode));
+export const setRealBalance = createAsyncThunk('wallet/correct', async ({ balance }) => correctWalletBalance(balance));
 export const deductAmount = createAsyncThunk('wallet/debit', async ({ amount }) => debitWallet(amount));
 
 const walletSlice = createSlice({

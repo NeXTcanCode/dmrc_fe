@@ -12,6 +12,7 @@ import {
   addRecharge,
   deductAmount,
   fetchWallet,
+  setRealBalance as setRealBalanceThunk,
 } from "../features/walletSlice";
 import {
   addPendingTrip,
@@ -20,7 +21,8 @@ import {
 } from "../features/tripsSlice";
 import { distanceInMeters, findNearestStation } from "../services/geolocationService";
 import { trackedStations } from "../data/trackedStations";
-import { clearGpsLog, downloadGpsLog, isDebugEnabled, startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
+import { missedRideCleared } from "../features/monitoringSlice";
+import { clearGpsLog, createMissedTrip, downloadGpsLog, isDebugEnabled, startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
 import { planJourney } from "../services/metroService";
 import { DMRC_STATION_CODES } from "../data/dmrcStationCodes";
 
@@ -76,12 +78,13 @@ export default function Dashboard() {
   const dispatch = useDispatch();
   const wallet = useSelector((state) => state.wallet);
   const trips = useSelector((state) => state.trips.items);
-  const { active: monitoring, message: monitorMessage, journey, nearest: liveNearest } = useSelector(
+  const { active: monitoring, message: monitorMessage, journey, nearest: liveNearest, missedRide } = useSelector(
     (state) => state.monitoring
   );
 
   const [rechargeAmount, setRechargeAmount] = useState("100");
   const [rechargeMode, setRechargeMode] = useState("online");
+  const [realBalance, setRealBalance] = useState("");
   const [boardingStationId, setBoardingStationId] = useState(
     stationOptions[0]?.id || ""
   );
@@ -349,6 +352,31 @@ export default function Dashboard() {
     }
   };
 
+  const onCorrectBalance = async () => {
+    setError("");
+    const balance = Number(realBalance);
+    if (realBalance === "" || Number.isNaN(balance) || balance < 0 || balance > 3000) {
+      const msg = "Enter the balance shown on your card, between 0 and 3000.";
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    try {
+      const res = await dispatch(setRealBalanceThunk({ balance })).unwrap();
+      await dispatch(fetchWallet()).unwrap();
+      toast.success(
+        res.difference === 0
+          ? "Balance already matches."
+          : `Balance corrected (${res.difference > 0 ? "+" : "-"}INR ${Math.abs(res.difference)}).`
+      );
+      setRealBalance("");
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || "Failed to correct balance";
+      setError(msg);
+      toast.error(msg);
+    }
+  };
+
   const onDebit = async () => {
     setError("");
     if (!rechargeAmount || Number.isNaN(Number(rechargeAmount))) {
@@ -435,6 +463,22 @@ export default function Dashboard() {
     }
   };
 
+  const [missedExitId, setMissedExitId] = useState("");
+
+  const onCreateMissedTrip = async () => {
+    setError("");
+    if (!missedExitId) {
+      setError("Select the station where you got off.");
+      return;
+    }
+    try {
+      await createMissedTrip(dispatch, missedRide.from.id, missedExitId);
+      setMissedExitId("");
+    } catch (e) {
+      setError(e?.message || "Could not create trip");
+    }
+  };
+
   const [oneShotNearest, setOneShotNearest] = useState(null);
   const [locating, setLocating] = useState(false);
 
@@ -510,6 +554,25 @@ export default function Dashboard() {
               "Nearest metro station: not located yet"
             )}
           </p>
+          {missedRide && (
+            <div className="journey-info">
+              <p>
+                Did you travel from <strong>{missedRide.from.name}</strong>? Where did you get off?
+              </p>
+              <div className="row actions">
+                <select value={missedExitId} onChange={(e) => setMissedExitId(e.target.value)}>
+                  <option value="">Select exit station</option>
+                  {stationOptions.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                <button onClick={onCreateMissedTrip}>Create Trip</button>
+                <button className="secondary" onClick={() => dispatch(missedRideCleared())}>
+                  No, dismiss
+                </button>
+              </div>
+            </div>
+          )}
           {journey && (
             <div className="journey-info">
               <p>
@@ -622,6 +685,23 @@ export default function Dashboard() {
             whileTap={{ scale: 0.98 }}
           >
             Rectify (-)
+          </motion.button>
+        </div>
+        <div className="row actions manual-grid">
+          <input
+            value={realBalance}
+            onChange={(e) => setRealBalance(e.target.value)}
+            type="number"
+            min="0"
+            max="3000"
+            placeholder="Real card balance (from gate / station machine)"
+          />
+          <motion.button
+            className="secondary"
+            onClick={onCorrectBalance}
+            whileTap={{ scale: 0.98 }}
+          >
+            Correct Balance
           </motion.button>
         </div>
       </motion.section>

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { step, initialTravelState } from '../src/services/travelTracker.js';
+import { step, initialTravelState, MAX_RIDE_MS } from '../src/services/travelTracker.js';
 
 const A = { id: 'A', name: 'A', lat: 28.5494, lng: 77.2001 };
 const B = { id: 'B', name: 'B', lat: 28.56, lng: 77.207 };
@@ -64,5 +64,23 @@ test('walking out of an interchange ends the trip there', () => {
 
 test('waiting at an interchange past the limit records the trip', () => {
   const ev = run([[0, at(A)], [100, null], [200, at(B)], [230, at(B)], [1200, null]], (s) => isInterchange(s));
+  assert.equal(ev.at(-1), 'trip:A>B');
+});
+
+test('a fix near another station after the max ride time is stale, not a trip', () => {
+  const late = MAX_RIDE_MS / 1000 + 600;
+  const ev = run([[0, at(A)], [5, at(A)], [100, null], [late, at(C)], [late + 30, at(C)]]);
+  assert.ok(ev.includes('stale_ride'));
+  assert.ok(!ev.some((e) => e.startsWith('trip')));
+});
+
+test('a timer tick past the max ride time reports a stale ride', () => {
+  const late = MAX_RIDE_MS / 1000 + 600;
+  const ev = run([[0, at(A)], [5, at(A)], [100, null], [late, null]]);
+  assert.equal(ev.at(-1), 'stale_ride');
+});
+
+test('a ride within the max time is unaffected', () => {
+  const ev = run([[0, at(A)], [5, at(A)], [100, null], [3600, at(B)]]);
   assert.equal(ev.at(-1), 'trip:A>B');
 });
