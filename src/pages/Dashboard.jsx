@@ -777,7 +777,11 @@ export default function Dashboard() {
               </span>
             </h2>
             {!geoUnavailable && !locationDenied && (
-              <button className="secondary" onClick={() => setManualOpen(false)}>
+              <button
+                className="secondary"
+                style={{ width: "max-content" }}
+                onClick={() => setManualOpen(false)}
+              >
                 Back
               </button>
             )}
