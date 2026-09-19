@@ -18,7 +18,8 @@ import {
   fetchTrips,
   markTripConfirmed,
 } from "../features/tripsSlice";
-import { distanceInMeters } from "../services/geolocationService";
+import { distanceInMeters, findNearestStation } from "../services/geolocationService";
+import { trackedStations } from "../data/trackedStations";
 import { startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
 import { planJourney } from "../services/metroService";
 import { DMRC_STATION_CODES } from "../data/dmrcStationCodes";
@@ -75,7 +76,7 @@ export default function Dashboard() {
   const dispatch = useDispatch();
   const wallet = useSelector((state) => state.wallet);
   const trips = useSelector((state) => state.trips.items);
-  const { active: monitoring, message: monitorMessage, journey } = useSelector(
+  const { active: monitoring, message: monitorMessage, journey, nearest: liveNearest } = useSelector(
     (state) => state.monitoring
   );
 
@@ -434,6 +435,38 @@ export default function Dashboard() {
     }
   };
 
+  const [oneShotNearest, setOneShotNearest] = useState(null);
+  const [locating, setLocating] = useState(false);
+
+  const findNearest = () => {
+    if (!navigator.geolocation) {
+      setError("Geolocation not supported in this browser");
+      return;
+    }
+    setError("");
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const hit = findNearestStation(
+          { lat: pos.coords.latitude, lng: pos.coords.longitude },
+          trackedStations
+        );
+        setOneShotNearest(
+          hit ? { name: hit.station.name, meters: Math.round(hit.meters) } : null
+        );
+        setLocating(false);
+      },
+      (err) => {
+        setError(err.message || "Unable to read location");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  };
+
+  // Live GPS result while monitoring; one-off lookup otherwise.
+  const nearestStation = monitoring ? liveNearest : oneShotNearest;
+
   const startMonitoring = () => {
     setError("");
     startMonitoringWatch(dispatch);
@@ -464,6 +497,19 @@ export default function Dashboard() {
         </div>
         <div className="monitor-row">
           <p className="monitor-line">{monitorMessage}</p>
+          <p className="monitor-line">
+            {nearestStation ? (
+              <>
+                Nearest metro station: <strong>{nearestStation.name}</strong> (
+                {nearestStation.meters >= 1000
+                  ? `${(nearestStation.meters / 1000).toFixed(1)} km`
+                  : `${nearestStation.meters} m`}
+                )
+              </>
+            ) : (
+              "Nearest metro station: not located yet"
+            )}
+          </p>
           {journey && (
             <div className="journey-info">
               <p>
@@ -488,6 +534,11 @@ export default function Dashboard() {
             </div>
           )}
           <div className="row actions monitor-actions">
+            {!monitoring && (
+              <button className="secondary" onClick={findNearest} disabled={locating}>
+                {locating ? "Locating..." : "Find Nearest Station"}
+              </button>
+            )}
             {!monitoring && (
               <button onClick={startMonitoring}>Enable Monitoring</button>
             )}

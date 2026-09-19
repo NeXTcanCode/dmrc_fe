@@ -5,6 +5,7 @@ const monitoringSlice = createSlice({
   initialState: {
     active: false,
     message: 'Travel monitoring is off',
+    nearest: null, // { name, meters } from the latest GPS fix
     journey: null // { lineName, lineColor, toward, next, interchange } while riding
   },
   reducers: {
@@ -16,6 +17,10 @@ const monitoringSlice = createSlice({
       state.active = false;
       state.message = 'Travel monitoring is off';
       state.journey = null;
+      state.nearest = null;
+    },
+    nearestSet(state, action) {
+      state.nearest = action.payload;
     },
     journeySet(state, action) {
       state.journey = action.payload;
@@ -26,5 +31,5 @@ const monitoringSlice = createSlice({
   }
 });
 
-export const { monitoringStarted, monitoringStopped, monitoringMessageSet, journeySet } = monitoringSlice.actions;
+export const { monitoringStarted, monitoringStopped, monitoringMessageSet, journeySet, nearestSet } = monitoringSlice.actions;
 export default monitoringSlice.reducer;

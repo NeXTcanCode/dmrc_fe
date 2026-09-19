@@ -6,11 +6,13 @@ import {
   journeySet,
   monitoringMessageSet,
   monitoringStarted,
-  monitoringStopped
+  monitoringStopped,
+  nearestSet
 } from '../features/monitoringSlice';
 import { DMRC_STATION_CODES } from '../data/dmrcStationCodes';
 import { getLines, getLineStations, planJourney } from './metroService';
 import { buildNetwork, inferLine, progressOnLine } from './journeyProgress';
+import { findNearestStation } from './geolocationService';
 import { initialTravelState, step } from './travelTracker';
 
 const TRIP_COOLDOWN_MS = 120000;
@@ -191,6 +193,15 @@ const advance = (dispatch, fix) => {
 };
 
 const handlePosition = async (dispatch, position) => {
+  const nearestStation = findNearestStation(
+    { lat: position.coords.latitude, lng: position.coords.longitude },
+    trackedStations
+  );
+  if (nearestStation) {
+    dispatch(
+      nearestSet({ name: nearestStation.station.name, meters: Math.round(nearestStation.meters) })
+    );
+  }
   await advance(dispatch, {
     lat: position.coords.latitude,
     lng: position.coords.longitude,
