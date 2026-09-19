@@ -22,7 +22,7 @@ import {
 import { distanceInMeters, findNearestStation } from "../services/geolocationService";
 import { trackedStations } from "../data/trackedStations";
 import { locationDeniedSet, missedRideCleared } from "../features/monitoringSlice";
-import { clearGpsLog, createMissedTrip, downloadGpsLog, getAutoStopAfterTrip, isDebugEnabled, setAutoStopAfterTrip, startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
+import { clearGpsLog, createMissedTrip, downloadGpsLog, isDebugEnabled, startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
 import { planJourney } from "../services/metroService";
 import { DMRC_STATION_CODES } from "../data/dmrcStationCodes";
 
@@ -464,7 +464,6 @@ export default function Dashboard() {
   };
 
   const [missedExitId, setMissedExitId] = useState("");
-  const [autoStop, setAutoStop] = useState(getAutoStopAfterTrip());
   const [manualOpen, setManualOpen] = useState(false);
   const geoUnavailable =
     typeof navigator !== "undefined" && !navigator.geolocation;
@@ -550,17 +549,6 @@ export default function Dashboard() {
         </div>
         <div className="monitor-row">
           <p className="monitor-line">{monitorMessage}</p>
-          <label className="monitor-toggle">
-            <input
-              type="checkbox"
-              checked={autoStop}
-              onChange={(e) => {
-                setAutoStop(e.target.checked);
-                setAutoStopAfterTrip(e.target.checked);
-              }}
-            />{" "}
-            Stop monitoring after each trip
-          </label>
           <p className="monitor-line">
             {nearestStation ? (
               <>

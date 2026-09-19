@@ -38,22 +38,6 @@ let ride = { originCode: null, line: null };
 let exitInfo = null;
 let deniedReported = false;
 
-const AUTO_STOP_KEY = 'dmrc.autoStopAfterTrip';
-export const getAutoStopAfterTrip = () => {
-  try {
-    return localStorage.getItem(AUTO_STOP_KEY) !== '0';
-  } catch {
-    return true;
-  }
-};
-export const setAutoStopAfterTrip = (on) => {
-  try {
-    localStorage.setItem(AUTO_STOP_KEY, on ? '1' : '0');
-  } catch {
-    // storage unavailable - default (on) applies
-  }
-};
-
 const coordsByCode = Object.fromEntries(
   trackedStations.filter((s) => s.code).map((s) => [s.code, { lat: s.lat, lng: s.lng }])
 );
@@ -291,7 +275,7 @@ const updateJourney = (dispatch, fix, event) => {
 const advance = (dispatch, fix) => {
   // Trip done and the rider has left the exit station: stop before the tracker
   // mistakes the walk away from the station for a new ride.
-  if (exitInfo && (travel.phase === 'idle' || travel.phase === 'at_station') && getAutoStopAfterTrip()) {
+  if (exitInfo && (travel.phase === 'idle' || travel.phase === 'at_station')) {
     const goodFix = fix && !(fix.accuracy > MAX_ACCEPTABLE_ACCURACY_M) ? fix : null;
     if (shouldAutoStop({ ...exitInfo, fix: goodFix, now: Date.now() })) {
       stopMonitoringWatch(dispatch);
