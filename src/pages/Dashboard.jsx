@@ -20,7 +20,7 @@ import {
 } from "../features/tripsSlice";
 import { distanceInMeters, findNearestStation } from "../services/geolocationService";
 import { trackedStations } from "../data/trackedStations";
-import { startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
+import { clearGpsLog, downloadGpsLog, startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
 import { planJourney } from "../services/metroService";
 import { DMRC_STATION_CODES } from "../data/dmrcStationCodes";
 
@@ -534,6 +534,12 @@ export default function Dashboard() {
             </div>
           )}
           <div className="row actions monitor-actions">
+            <button className="secondary" onClick={downloadGpsLog}>
+              Download GPS Log
+            </button>
+            <button className="secondary" onClick={clearGpsLog}>
+              Clear GPS Log
+            </button>
             {!monitoring && (
               <button className="secondary" onClick={findNearest} disabled={locating}>
                 {locating ? "Locating..." : "Find Nearest Station"}

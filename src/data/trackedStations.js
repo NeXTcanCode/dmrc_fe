@@ -2,7 +2,8 @@
 // station coordinates, falling back to geoStations and to coordinates embedded in
 // the station name. Ids and names match stationOptions so trip history resolves
 // them; `code` is the DMRC station code (null when the crosswalk has no entry).
-// Stations with no known coordinates are omitted, so auto-capture cannot see them.
+// Entries with `approx: true` have coordinates interpolated between the neighbouring
+// stations on the same line (by id order); they are estimates, not surveyed points.
 export const trackedStations = [
   {
     "id": "R01",
@@ -180,6 +181,30 @@ export const trackedStations = [
     "lng": 77.1405
   },
   {
+    "id": "R26",
+    "name": "Pitampura",
+    "code": null,
+    "lat": 28.7037,
+    "lng": 77.13218,
+    "approx": true
+  },
+  {
+    "id": "R27",
+    "name": "Rohini East",
+    "code": null,
+    "lat": 28.7094,
+    "lng": 77.12385,
+    "approx": true
+  },
+  {
+    "id": "R28",
+    "name": "Rohini West",
+    "code": null,
+    "lat": 28.7151,
+    "lng": 77.11553,
+    "approx": true
+  },
+  {
     "id": "R29",
     "name": "Rithala",
     "code": "RI",
@@ -271,6 +296,13 @@ export const trackedStations = [
     "lng": 77.1937
   },
   {
+    "id": "Y08",
+    "name": "Guru Tegh Bahadur Nagar",
+    "code": "GTBR",
+    "lat": 28.6984,
+    "lng": 77.2059
+  },
+  {
     "id": "Y09",
     "name": "Vishwavidyalaya",
     "code": "VW",
@@ -334,6 +366,14 @@ export const trackedStations = [
     "lng": 77.2123
   },
   {
+    "id": "Y19",
+    "name": "Udyog Bhawan",
+    "code": null,
+    "lat": 28.60645,
+    "lng": 77.21175,
+    "approx": true
+  },
+  {
     "id": "Y20",
     "name": "Lok Kalyan Marg",
     "code": "LKM",
@@ -350,7 +390,7 @@ export const trackedStations = [
   {
     "id": "Y22",
     "name": "Dilli Haat INA",
-    "code": null,
+    "code": "INA",
     "lat": 28.5744,
     "lng": 77.2096
   },
@@ -483,7 +523,7 @@ export const trackedStations = [
   {
     "id": "P16",
     "name": "Dilli Haat INA (28.574,77.210)",
-    "code": null,
+    "code": "INA",
     "lat": 28.574,
     "lng": 77.21
   },
@@ -563,6 +603,14 @@ export const trackedStations = [
     "code": "DSFN",
     "lat": 28.6022,
     "lng": 77.0259
+  },
+  {
+    "id": "BM09",
+    "name": "Dwarka",
+    "code": null,
+    "lat": 28.612,
+    "lng": 77.0335,
+    "approx": true
   },
   {
     "id": "BM10",
@@ -742,7 +790,7 @@ export const trackedStations = [
   {
     "id": "BM36",
     "name": "Mayur Vihar I",
-    "code": null,
+    "code": "MVP1",
     "lat": 28.604,
     "lng": 77.29
   },
@@ -875,7 +923,7 @@ export const trackedStations = [
   {
     "id": "P22",
     "name": "Mayur Vihar I (28.604,77.290)",
-    "code": null,
+    "code": "MVP1",
     "lat": 28.604,
     "lng": 77.29
   },
@@ -1083,6 +1131,14 @@ export const trackedStations = [
     "lng": 77.0146522
   },
   {
+    "id": "GN19",
+    "name": "Ghevra",
+    "code": null,
+    "lat": 28.68458,
+    "lng": 76.99487,
+    "approx": true
+  },
+  {
     "id": "GN20",
     "name": "Tikri Kalan",
     "code": "TKLM",
@@ -1225,7 +1281,7 @@ export const trackedStations = [
   {
     "id": "V19",
     "name": "Jasola Apollo",
-    "code": null,
+    "code": "JLA",
     "lat": 28.5382066,
     "lng": 77.2811108
   },
@@ -1372,7 +1428,7 @@ export const trackedStations = [
   {
     "id": "P07",
     "name": "ESI Basaidarapur",
-    "code": null,
+    "code": "ESIH",
     "lat": 28.6582712,
     "lng": 77.1252019
   },
@@ -1449,28 +1505,36 @@ export const trackedStations = [
   {
     "id": "P21",
     "name": "Sarai Kale Khan Nizamuddin",
-    "code": null,
+    "code": "NIZM",
     "lat": 28.58936,
     "lng": 77.2549413
   },
   {
+    "id": "P23",
+    "name": "Mayur Vihar Pocket I",
+    "code": null,
+    "lat": 28.60872,
+    "lng": 77.2989,
+    "approx": true
+  },
+  {
     "id": "P24",
     "name": "Trilokpuri Sanjay Lake",
-    "code": null,
+    "code": "TKPR",
     "lat": 28.6134317,
     "lng": 77.3077957
   },
   {
     "id": "P25",
     "name": "East Vinod Nagar Mayur Vihar II",
-    "code": null,
+    "code": "VENT",
     "lat": 28.620363,
     "lng": 77.3023292
   },
   {
     "id": "P26",
     "name": "Mandawali West Vinod Nagar",
-    "code": null,
+    "code": "VNNR",
     "lat": 28.624877,
     "lng": 77.3021833
   },
@@ -1512,7 +1576,7 @@ export const trackedStations = [
   {
     "id": "P35",
     "name": "Maujpur Babarpur",
-    "code": null,
+    "code": "MUPR",
     "lat": 28.6921031,
     "lng": 77.2774233
   },
@@ -1547,7 +1611,7 @@ export const trackedStations = [
   {
     "id": "M03",
     "name": "Dabri Mor Janakpuri South",
-    "code": null,
+    "code": "DBMR",
     "lat": 28.6155363,
     "lng": 77.0825158
   },
@@ -1575,7 +1639,7 @@ export const trackedStations = [
   {
     "id": "M07",
     "name": "Terminal 1 IGI Airport",
-    "code": null,
+    "code": "IGDA",
     "lat": 28.5647538,
     "lng": 77.1221478
   },
@@ -1776,9 +1840,17 @@ export const trackedStations = [
     "lng": 77.0947
   },
   {
+    "id": "RM05",
+    "name": "Phase I",
+    "code": null,
+    "lat": 28.46935,
+    "lng": 77.0939,
+    "approx": true
+  },
+  {
     "id": "RM07",
     "name": "Phase 2",
-    "code": null,
+    "code": "DL2",
     "lat": 28.4873,
     "lng": 77.0931
   },
@@ -1806,7 +1878,7 @@ export const trackedStations = [
   {
     "id": "RM11",
     "name": "Phase 3",
-    "code": null,
+    "code": "DL3",
     "lat": 28.4925,
     "lng": 77.0919
   }

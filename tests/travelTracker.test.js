@@ -1,0 +1,68 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { step, initialTravelState } from '../src/services/travelTracker.js';
+
+const A = { id: 'A', name: 'A', lat: 28.5494, lng: 77.2001 };
+const B = { id: 'B', name: 'B', lat: 28.56, lng: 77.207 };
+const C = { id: 'C', name: 'C', lat: 28.57, lng: 77.214 };
+const stations = [A, B, C];
+const isInterchange = (s) => s.id === 'B';
+
+const at = (s, extra = {}) => ({ lat: s.lat, lng: s.lng, accuracy: 10, ...extra });
+
+// seq: [seconds, fix|null]; returns the list of event summaries
+const run = (seq, interchange = () => false) => {
+  let state = { ...initialTravelState };
+  return seq.map(([t, fix]) => {
+    const r = step(state, fix, t * 1000, stations, interchange);
+    state = r.state;
+    return r.event.type === 'trip' ? `trip:${r.event.from.id}>${r.event.to.id}` : r.event.type;
+  });
+};
+
+test('short ride with a GPS gap creates one trip', () => {
+  const ev = run([[0, at(A)], [5, at(A)], [100, null], [200, at(B)]]);
+  assert.equal(ev.at(-1), 'trip:A>B');
+});
+
+test('passing an intermediate station at speed does not end the trip', () => {
+  const ev = run([[0, at(A)], [30, at(B, { speed: 15 })], [600, at(C)], [650, at(C)]]);
+  assert.deepEqual(ev.filter((e) => e.startsWith('trip')), ['trip:A>C']);
+});
+
+test('slow walk between stations is rejected', () => {
+  const seq = [[0, at(A)]];
+  for (let i = 1; i <= 40; i++) {
+    const f = i / 40;
+    seq.push([i * 30, { lat: A.lat + (B.lat - A.lat) * f, lng: A.lng + (B.lng - A.lng) * f, accuracy: 10, speed: 1.4 }]);
+  }
+  for (let i = 1; i <= 3; i++) seq.push([1200 + i * 30, at(B, { speed: 0 })]);
+  const ev = run(seq);
+  assert.ok(ev.includes('rejected'));
+  assert.ok(!ev.some((e) => e.startsWith('trip')));
+});
+
+test('poor accuracy fixes are ignored', () => {
+  assert.deepEqual(run([[0, at(A, { accuracy: 80 })]]), ['poor_fix']);
+});
+
+test('changing trains at an interchange yields one trip to the final station', () => {
+  const ev = run(
+    [[0, at(A)], [5, at(A)], [100, null], [200, at(B)], [230, at(B)], [250, at(B)], [300, at(B)], [420, at(B)], [500, null], [900, at(C)], [950, at(C)], [1000, at(C)]],
+    (s) => isInterchange(s)
+  );
+  assert.deepEqual(ev.filter((e) => e.startsWith('trip')), ['trip:A>C']);
+});
+
+test('walking out of an interchange ends the trip there', () => {
+  const ev = run(
+    [[0, at(A)], [100, null], [200, at(B)], [230, at(B)], [300, at(B)], [330, { lat: 28.5615, lng: 77.2085, accuracy: 10, speed: 1.4 }], [360, { lat: 28.564, lng: 77.211, accuracy: 10, speed: 1.4 }]],
+    (s) => isInterchange(s)
+  );
+  assert.equal(ev.at(-1), 'trip:A>B');
+});
+
+test('waiting at an interchange past the limit records the trip', () => {
+  const ev = run([[0, at(A)], [100, null], [200, at(B)], [230, at(B)], [1200, null]], (s) => isInterchange(s));
+  assert.equal(ev.at(-1), 'trip:A>B');
+});

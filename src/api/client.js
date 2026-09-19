@@ -12,9 +12,9 @@ export const setAuthToken = (token) => {
   }
 };
 
-// The backend JWT expires after 1h with no refresh flow. Without this, an
-// expired session just fails every authenticated request with a raw 401
-// until the user manually logs out. Catch it here and bounce to login.
+// Tokens no longer expire, but a token can still be rejected (changed secret,
+// deleted user). Without this, that fails every authenticated request with a
+// raw 401 until the user manually logs out. Catch it here and bounce to login.
 api.interceptors.response.use(
   (response) => response,
   (error) => {

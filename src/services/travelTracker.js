@@ -1,4 +1,4 @@
-import { distanceInMeters, findNearestStation } from './geolocationService';
+import { distanceInMeters, findNearestStation } from './geolocationService.js';
 
 export const STATION_RADIUS_M = 80;
 export const MAX_ACCEPTABLE_ACCURACY_M = 50;

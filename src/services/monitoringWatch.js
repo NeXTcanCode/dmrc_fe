@@ -73,6 +73,47 @@ function loadTravel() {
   }
 }
 
+// Rolling log of raw GPS fixes so real rides can be exported and used to tune thresholds.
+const LOG_KEY = 'dmrc.gpsLog';
+const LOG_MAX = 1500;
+const logFix = (position, phase) => {
+  try {
+    const log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    log.push({
+      t: new Date(position.timestamp || Date.now()).toISOString(),
+      lat: position.coords.latitude,
+      lng: position.coords.longitude,
+      acc: position.coords.accuracy,
+      speed: position.coords.speed,
+      phase
+    });
+    localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(-LOG_MAX)));
+  } catch {
+    // logging is best-effort
+  }
+};
+
+export const downloadGpsLog = () => {
+  try {
+    const blob = new Blob([localStorage.getItem(LOG_KEY) || '[]'], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `gps-log-${new Date().toISOString().slice(0, 16)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch {
+    // ignore
+  }
+};
+
+export const clearGpsLog = () => {
+  try {
+    localStorage.removeItem(LOG_KEY);
+  } catch {
+    // ignore
+  }
+};
+
 const saveTravel = () => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(travel));
@@ -193,6 +234,7 @@ const advance = (dispatch, fix) => {
 };
 
 const handlePosition = async (dispatch, position) => {
+  logFix(position, travel.phase);
   const nearestStation = findNearestStation(
     { lat: position.coords.latitude, lng: position.coords.longitude },
     trackedStations
