@@ -21,8 +21,8 @@ import {
 } from "../features/tripsSlice";
 import { distanceInMeters, findNearestStation } from "../services/geolocationService";
 import { trackedStations } from "../data/trackedStations";
-import { missedRideCleared } from "../features/monitoringSlice";
-import { clearGpsLog, createMissedTrip, downloadGpsLog, isDebugEnabled, startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
+import { locationDeniedSet, missedRideCleared } from "../features/monitoringSlice";
+import { clearGpsLog, createMissedTrip, downloadGpsLog, getAutoStopAfterTrip, isDebugEnabled, setAutoStopAfterTrip, startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
 import { planJourney } from "../services/metroService";
 import { DMRC_STATION_CODES } from "../data/dmrcStationCodes";
 
@@ -78,7 +78,7 @@ export default function Dashboard() {
   const dispatch = useDispatch();
   const wallet = useSelector((state) => state.wallet);
   const trips = useSelector((state) => state.trips.items);
-  const { active: monitoring, message: monitorMessage, journey, nearest: liveNearest, missedRide } = useSelector(
+  const { active: monitoring, message: monitorMessage, journey, nearest: liveNearest, missedRide, locationDenied } = useSelector(
     (state) => state.monitoring
   );
 
@@ -464,6 +464,11 @@ export default function Dashboard() {
   };
 
   const [missedExitId, setMissedExitId] = useState("");
+  const [autoStop, setAutoStop] = useState(getAutoStopAfterTrip());
+  const [manualOpen, setManualOpen] = useState(false);
+  const geoUnavailable =
+    typeof navigator !== "undefined" && !navigator.geolocation;
+  const showManual = manualOpen || geoUnavailable || locationDenied;
 
   const onCreateMissedTrip = async () => {
     setError("");
@@ -501,6 +506,7 @@ export default function Dashboard() {
         setLocating(false);
       },
       (err) => {
+        if (err.code === 1) dispatch(locationDeniedSet(true));
         setError(err.message || "Unable to read location");
         setLocating(false);
       },
@@ -536,11 +542,25 @@ export default function Dashboard() {
         <div className="monitor-head">
           <div className="section-head">
             <h2>Travel Monitoring</h2>
-            <p>Automatic trip capture using live geolocation.</p>
+            <p>
+              Press Enable Monitoring at the station. Trips are created
+              automatically - no manual entry needed.
+            </p>
           </div>
         </div>
         <div className="monitor-row">
           <p className="monitor-line">{monitorMessage}</p>
+          <label className="monitor-line">
+            <input
+              type="checkbox"
+              checked={autoStop}
+              onChange={(e) => {
+                setAutoStop(e.target.checked);
+                setAutoStopAfterTrip(e.target.checked);
+              }}
+            />{" "}
+            Stop monitoring after each trip
+          </label>
           <p className="monitor-line">
             {nearestStation ? (
               <>
@@ -706,12 +726,13 @@ export default function Dashboard() {
         </div>
       </motion.section>
 
+      {showManual ? (
       <motion.section className="card full" variants={itemVariants}>
         <div className="section-head">
           <h2>
-            Manual Trip Fallback
+            Add a trip manually
             <span style={{ fontSize: "14px" }}>
-              (Only if geolocation is unavailable.)
+              {" "}(For missed trips or when location is unavailable.)
             </span>
           </h2>
         </div>
@@ -802,6 +823,13 @@ export default function Dashboard() {
           )}
         </p>
       </motion.section>
+      ) : (
+        <motion.section className="card full" variants={itemVariants}>
+          <button className="secondary" onClick={() => setManualOpen(true)}>
+            Missed a trip? Add it manually
+          </button>
+        </motion.section>
+      )}
 
       <motion.section className="card full" variants={itemVariants}>
         <div className="section-head">

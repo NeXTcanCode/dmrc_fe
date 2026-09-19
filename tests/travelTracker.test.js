@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { step, initialTravelState, MAX_RIDE_MS, MAX_STORED_FIXES } from '../src/services/travelTracker.js';
+import { step, initialTravelState, MAX_RIDE_MS, MAX_STORED_FIXES, shouldAutoStop, AUTO_STOP_AFTER_MS } from '../src/services/travelTracker.js';
 
 const A = { id: 'A', name: 'A', lat: 28.5494, lng: 77.2001 };
 const B = { id: 'B', name: 'B', lat: 28.56, lng: 77.207 };
@@ -99,4 +99,26 @@ test('trip events carry the fixes collected while travelling', () => {
   assert.ok(last, 'trip created');
   assert.ok(last.fixes.length > 0 && last.fixes.length <= MAX_STORED_FIXES);
   assert.ok(last.leftAt != null);
+});
+
+test('auto-stop: not before leaving the exit station', () => {
+  assert.equal(shouldAutoStop({ exitStation: B, fix: at(B), now: 60000, tripAt: 0 }), false);
+});
+
+test('auto-stop: once the rider walks more than 300 m away', () => {
+  const far = { lat: B.lat + 0.004, lng: B.lng, accuracy: 10, speed: 1.4 };
+  assert.equal(shouldAutoStop({ exitStation: B, fix: far, now: 60000, tripAt: 0 }), true);
+});
+
+test('auto-stop: fast movement (another train) does not stop monitoring', () => {
+  const fast = { lat: B.lat + 0.004, lng: B.lng, accuracy: 10, speed: 15 };
+  assert.equal(shouldAutoStop({ exitStation: B, fix: fast, now: 60000, tripAt: 0 }), false);
+});
+
+test('auto-stop: after the time limit even without a fix', () => {
+  assert.equal(shouldAutoStop({ exitStation: B, fix: null, now: AUTO_STOP_AFTER_MS + 1, tripAt: 0 }), true);
+});
+
+test('auto-stop: never without a recorded trip', () => {
+  assert.equal(shouldAutoStop({ exitStation: null, fix: at(B), now: 1e9, tripAt: null }), false);
 });

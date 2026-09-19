@@ -4,6 +4,7 @@ import { fetchTrips } from '../features/tripsSlice';
 import { fetchWallet } from '../features/walletSlice';
 import {
   journeySet,
+  locationDeniedSet,
   missedRideCleared,
   missedRideSet,
   monitoringMessageSet,
@@ -16,7 +17,7 @@ import { getLines, getLineStations, planJourney } from './metroService';
 import { corridorCheck, decideRide, durationCheck, parseDurationMin, routePolylines, speedCheck } from './rideValidation';
 import { buildNetwork, inferLine, progressOnLine } from './journeyProgress';
 import { distanceInMeters, findNearestStation } from './geolocationService';
-import { initialTravelState, step } from './travelTracker';
+import { MAX_ACCEPTABLE_ACCURACY_M, initialTravelState, shouldAutoStop, step } from './travelTracker';
 
 const TRIP_COOLDOWN_MS = 120000;
 const TICK_MS = 15000;
@@ -33,6 +34,25 @@ let interchangeCodes = new Set();
 let network = null;
 // Which line/direction the rider is on; re-inferred after each interchange.
 let ride = { originCode: null, line: null };
+// Where the last recorded trip ended; used to switch monitoring off after the rider walks away.
+let exitInfo = null;
+let deniedReported = false;
+
+const AUTO_STOP_KEY = 'dmrc.autoStopAfterTrip';
+export const getAutoStopAfterTrip = () => {
+  try {
+    return localStorage.getItem(AUTO_STOP_KEY) !== '0';
+  } catch {
+    return true;
+  }
+};
+export const setAutoStopAfterTrip = (on) => {
+  try {
+    localStorage.setItem(AUTO_STOP_KEY, on ? '1' : '0');
+  } catch {
+    // storage unavailable - default (on) applies
+  }
+};
 
 const coordsByCode = Object.fromEntries(
   trackedStations.filter((s) => s.code).map((s) => [s.code, { lat: s.lat, lng: s.lng }])
@@ -269,9 +289,23 @@ const updateJourney = (dispatch, fix, event) => {
 };
 
 const advance = (dispatch, fix) => {
+  // Trip done and the rider has left the exit station: stop before the tracker
+  // mistakes the walk away from the station for a new ride.
+  if (exitInfo && (travel.phase === 'idle' || travel.phase === 'at_station') && getAutoStopAfterTrip()) {
+    const goodFix = fix && !(fix.accuracy > MAX_ACCEPTABLE_ACCURACY_M) ? fix : null;
+    if (shouldAutoStop({ ...exitInfo, fix: goodFix, now: Date.now() })) {
+      stopMonitoringWatch(dispatch);
+      dispatch(
+        monitoringMessageSet('Trip captured. Monitoring stopped - enable it again for your next ride.')
+      );
+      return;
+    }
+  }
+
   const { state, event } = step(travel, fix, Date.now(), trackedStations, isInterchange);
   const changed = state.phase !== travel.phase;
   travel = state;
+  if (travel.phase === 'in_transit') exitInfo = null; // a new ride began
   if (changed || fix) saveTravel();
 
   updateJourney(dispatch, fix, event);
@@ -288,7 +322,9 @@ const advance = (dispatch, fix) => {
   if (event.type === 'trip') {
     return validateTrip(event).then((v) =>
       v.ok
-        ? createTrip(dispatch, event.from, event.to, event.meters)
+        ? createTrip(dispatch, event.from, event.to, event.meters).then((created) => {
+            if (created) exitInfo = { exitStation: event.to, tripAt: Date.now() };
+          })
         : dispatch(
             monitoringMessageSet(`Ignored ${event.from.name} to ${event.to.name}: ${v.reason}.`)
           )
@@ -299,6 +335,10 @@ const advance = (dispatch, fix) => {
 };
 
 const handlePosition = async (dispatch, position) => {
+  if (deniedReported) {
+    deniedReported = false;
+    dispatch(locationDeniedSet(false));
+  }
   logFix(position, travel.phase);
   const nearestStation = findNearestStation(
     { lat: position.coords.latitude, lng: position.coords.longitude },
@@ -344,8 +384,13 @@ export const startMonitoringWatch = (dispatch) => {
       handlePosition(dispatch, position).catch(() =>
         dispatch(monitoringMessageSet('Location processing failed'))
       ),
-    (geoError) =>
-      dispatch(monitoringMessageSet(geoError.message || 'Unable to read location')),
+    (geoError) => {
+      if (geoError.code === 1) {
+        deniedReported = true;
+        dispatch(locationDeniedSet(true));
+      }
+      dispatch(monitoringMessageSet(geoError.message || 'Unable to read location'));
+    },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
   );
   // watchPosition goes silent underground, so a timer detects the gap.
@@ -365,6 +410,7 @@ export const stopMonitoringWatch = (dispatch) => {
   }
   travel = { ...initialTravelState };
   lastCreatedAt = 0;
+  exitInfo = null;
   saveTravel();
   dispatch(monitoringStopped());
 };
