@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test tests/travelTracker.test.js"
+    "test": "node --test tests/travelTracker.test.js tests/rideValidation.test.js"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.2.7",

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { step, initialTravelState, MAX_RIDE_MS } from '../src/services/travelTracker.js';
+import { step, initialTravelState, MAX_RIDE_MS, MAX_STORED_FIXES } from '../src/services/travelTracker.js';
 
 const A = { id: 'A', name: 'A', lat: 28.5494, lng: 77.2001 };
 const B = { id: 'B', name: 'B', lat: 28.56, lng: 77.207 };
@@ -83,4 +83,20 @@ test('a timer tick past the max ride time reports a stale ride', () => {
 test('a ride within the max time is unaffected', () => {
   const ev = run([[0, at(A)], [5, at(A)], [100, null], [3600, at(B)]]);
   assert.equal(ev.at(-1), 'trip:A>B');
+});
+
+test('trip events carry the fixes collected while travelling', () => {
+  let state = { ...initialTravelState };
+  let last;
+  const seq = [[0, at(A)], [5, at(A)]];
+  for (let i = 0; i < 400; i++) seq.push([100 + i * 6, { lat: 28.555, lng: 77.204, accuracy: 10, speed: 12 }]);
+  seq.push([3000, at(C)]);
+  for (const [t, fix] of seq) {
+    const r = step(state, fix, t * 1000, stations, () => false);
+    state = r.state;
+    if (r.event.type === 'trip') last = r.event;
+  }
+  assert.ok(last, 'trip created');
+  assert.ok(last.fixes.length > 0 && last.fixes.length <= MAX_STORED_FIXES);
+  assert.ok(last.leftAt != null);
 });

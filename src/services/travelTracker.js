@@ -9,6 +9,8 @@ export const DWELL_MS = 45000;
 export const MAX_SPEED_MS = 80 / 3.6;
 export const MIN_AVG_SPEED_MS = 10 / 3.6;
 export const INTERCHANGE_WAIT_MS = 15 * 60000;
+export const FIX_SAMPLE_MS = 5000;
+export const MAX_STORED_FIXES = 300;
 export const MAX_RIDE_MS = 5 * 60 * 60000;
 const DWELL_MAX_SPEED_MS = 2;
 
@@ -21,12 +23,19 @@ export const initialTravelState = {
   dwellStationId: null,
   dwellSince: null,
   via: null, // interchange station where the ride may continue
-  viaAt: null
+  viaAt: null,
+  fixes: [] // sampled good fixes while travelling, for the route checks
 };
 
 // Interchange stations appear once per line with different ids but the same
 // coordinates; treat those as one physical station.
 const sameStation = (a, b) => a.id === b.id || distanceInMeters(a, b) < STATION_RADIUS_M * 2;
+
+const addFix = (fixes = [], fix, now) => {
+  const last = fixes[fixes.length - 1];
+  if (last && now - last.t < FIX_SAMPLE_MS) return fixes;
+  return [...fixes, { lat: fix.lat, lng: fix.lng, t: now }].slice(-MAX_STORED_FIXES);
+};
 
 const atStation = (station, now) => ({
   ...initialTravelState,
@@ -64,7 +73,10 @@ export const step = (state, fix, now, stations, isInterchange = () => false) => 
     if (state.phase === 'interchange_wait' && now - state.viaAt > INTERCHANGE_WAIT_MS) {
       return {
         state: { ...initialTravelState },
-        event: { type: 'trip', from: state.station, to: state.via, meters: distanceInMeters(state.station, state.via) }
+        event: {
+          type: 'trip', from: state.station, to: state.via, meters: distanceInMeters(state.station, state.via),
+          fixes: state.fixes, leftAt: state.leftAt, endedAtInterchange: true
+        }
       };
     }
     if (state.phase === 'at_station' && now - state.lastFixAt > GPS_GAP_MS) {
@@ -98,6 +110,10 @@ export const step = (state, fix, now, stations, isInterchange = () => false) => 
     current = { ...current, gapSeen: true };
   }
 
+  if (current.phase === 'in_transit') {
+    current = { ...current, fixes: addFix(current.fixes, fix, now) };
+  }
+
   if (current.phase === 'interchange_wait') {
     const via = current.via;
     const awayVia = distanceInMeters(via, fix);
@@ -121,7 +137,10 @@ export const step = (state, fix, now, stations, isInterchange = () => false) => 
       // Walked out of the interchange station: the ride really ended there.
       return {
         state: { ...initialTravelState },
-        event: { type: 'trip', from: current.station, to: via, meters: distanceInMeters(current.station, via) }
+        event: {
+          type: 'trip', from: current.station, to: via, meters: distanceInMeters(current.station, via),
+          fixes: current.fixes, leftAt: current.leftAt, endedAtInterchange: true
+        }
       };
     }
     return { state: current, event: { type: 'interchange', at: via } };
@@ -180,6 +199,6 @@ export const step = (state, fix, now, stations, isInterchange = () => false) => 
 
   return {
     state: { ...initialTravelState },
-    event: { type: 'trip', from: current.station, to: dest, meters }
+    event: { type: 'trip', from: current.station, to: dest, meters, fixes: current.fixes, leftAt: current.leftAt }
   };
 };

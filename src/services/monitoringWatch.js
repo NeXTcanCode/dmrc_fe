@@ -13,6 +13,7 @@ import {
 } from '../features/monitoringSlice';
 import { DMRC_STATION_CODES } from '../data/dmrcStationCodes';
 import { getLines, getLineStations, planJourney } from './metroService';
+import { corridorCheck, decideRide, durationCheck, parseDurationMin, routePolylines, speedCheck } from './rideValidation';
 import { buildNetwork, inferLine, progressOnLine } from './journeyProgress';
 import { distanceInMeters, findNearestStation } from './geolocationService';
 import { initialTravelState, step } from './travelTracker';
@@ -182,6 +183,31 @@ const routeDistanceKm = async (from, to) => {
   }
 };
 
+// Rejects rides that did not follow the metro line or took an unusual time.
+// Never blocks a trip because data is missing (no planner, no coordinates).
+const validateTrip = async (event) => {
+  const fromCode = codeOf(event.from);
+  const toCode = codeOf(event.to);
+  if (!network || !fromCode || !toCode) return { ok: true };
+  let plan;
+  try {
+    plan = await planJourney(fromCode, toCode, 'least-distance');
+  } catch {
+    return { ok: true };
+  }
+  const legs = Array.isArray(plan?.legs) ? plan.legs : [];
+  const polylines = routePolylines(network, legs);
+  const corridor = corridorCheck(event.fixes, polylines);
+  const speed = speedCheck(event.fixes, polylines.flat());
+  let duration = null;
+  if (!event.endedAtInterchange && event.leftAt) {
+    const elapsedMin = (Date.now() - event.leftAt) / 60000;
+    const interchanges = Math.max(0, legs.length - 1);
+    duration = durationCheck(elapsedMin, parseDurationMin(plan?.total_time), interchanges);
+  }
+  return decideRide({ corridor, duration, speed });
+};
+
 const createTrip = async (dispatch, from, to, meters) => {
   const now = Date.now();
   if (now - lastCreatedAt < TRIP_COOLDOWN_MS) return false;
@@ -260,7 +286,13 @@ const advance = (dispatch, fix) => {
   }
 
   if (event.type === 'trip') {
-    return createTrip(dispatch, event.from, event.to, event.meters);
+    return validateTrip(event).then((v) =>
+      v.ok
+        ? createTrip(dispatch, event.from, event.to, event.meters)
+        : dispatch(
+            monitoringMessageSet(`Ignored ${event.from.name} to ${event.to.name}: ${v.reason}.`)
+          )
+    );
   }
   const msg = messageFor(event);
   if (msg) dispatch(monitoringMessageSet(msg));
