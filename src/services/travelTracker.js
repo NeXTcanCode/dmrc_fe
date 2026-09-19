@@ -31,7 +31,7 @@ export const initialTravelState = {
 
 // Interchange stations appear once per line with different ids but the same
 // coordinates; treat those as one physical station.
-const sameStation = (a, b) => a.id === b.id || distanceInMeters(a, b) < STATION_RADIUS_M * 2;
+export const sameStation = (a, b) => a.id === b.id || distanceInMeters(a, b) < STATION_RADIUS_M * 2;
 
 const addFix = (fixes = [], fix, now) => {
   const last = fixes[fixes.length - 1];
@@ -72,7 +72,13 @@ export const step = (state, fix, now, stations, isInterchange = () => false) => 
   }
 
   if (!fix) {
-    if (state.phase === 'interchange_wait' && now - state.viaAt > INTERCHANGE_WAIT_MS) {
+    // Only time out the wait while fixes are still arriving: if the app was suspended
+    // (tab hidden, screen off) the elapsed time proves nothing, so wait for a fix.
+    if (
+      state.phase === 'interchange_wait' &&
+      now - state.viaAt > INTERCHANGE_WAIT_MS &&
+      now - state.lastFixAt <= GPS_GAP_MS
+    ) {
       return {
         state: { ...initialTravelState },
         event: {

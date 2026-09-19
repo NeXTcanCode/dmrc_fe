@@ -63,7 +63,7 @@ test('walking out of an interchange ends the trip there', () => {
 });
 
 test('waiting at an interchange past the limit records the trip', () => {
-  const ev = run([[0, at(A)], [100, null], [200, at(B)], [230, at(B)], [1200, null]], (s) => isInterchange(s));
+  const ev = run([[0, at(A)], [100, null], [200, at(B)], [230, at(B)], [1170, at(B)], [1200, null]], (s) => isInterchange(s));
   assert.equal(ev.at(-1), 'trip:A>B');
 });
 
@@ -121,4 +121,9 @@ test('auto-stop: after the time limit even without a fix', () => {
 
 test('auto-stop: never without a recorded trip', () => {
   assert.equal(shouldAutoStop({ exitStation: null, fix: at(B), now: 1e9, tripAt: null }), false);
+});
+
+test('an interchange wait is not timed out after the app was suspended', () => {
+  const ev = run([[0, at(A)], [100, null], [200, at(B)], [230, at(B)], [1800, null]], (s) => isInterchange(s));
+  assert.ok(!ev.some((e) => e.startsWith('trip')));
 });

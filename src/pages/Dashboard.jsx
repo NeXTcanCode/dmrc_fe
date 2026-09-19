@@ -491,6 +491,12 @@ export default function Dashboard() {
 
   const [missedExitId, setMissedExitId] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
+  // Preselect the most likely exit station whenever a new interrupted ride appears.
+  useEffect(() => {
+    setMissedExitId(
+      missedRide?.suggestion?.id || missedRide?.lastSeen?.id || ""
+    );
+  }, [missedRide]);
   const geoUnavailable =
     typeof navigator !== "undefined" && !navigator.geolocation;
   const showManual = manualOpen || geoUnavailable || locationDenied;
@@ -593,8 +599,27 @@ export default function Dashboard() {
           {missedRide && (
             <div className="journey-info">
               <p>
-                Did you travel from <strong>{missedRide.from.name}</strong>?
-                Where did you get off?
+                {missedRide.kind === "at_station" && missedRide.suggestion ? (
+                  <>
+                    Tracking was interrupted during your ride from{" "}
+                    <strong>{missedRide.from.name}</strong>. You are now at{" "}
+                    <strong>{missedRide.suggestion.name}</strong>. Did the ride
+                    end here? Change the station if you got off elsewhere.
+                  </>
+                ) : missedRide.kind === "away" ? (
+                  <>
+                    Tracking was interrupted during your ride from{" "}
+                    <strong>{missedRide.from.name}</strong>. Where did you get
+                    off?
+                    {missedRide.lastSeen &&
+                      ` Last seen at ${missedRide.lastSeen.name}.`}
+                  </>
+                ) : (
+                  <>
+                    Did you travel from <strong>{missedRide.from.name}</strong>?
+                    Where did you get off?
+                  </>
+                )}
               </p>
               <div className="row actions">
                 <select
