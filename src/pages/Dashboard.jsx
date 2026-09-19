@@ -550,7 +550,7 @@ export default function Dashboard() {
         </div>
         <div className="monitor-row">
           <p className="monitor-line">{monitorMessage}</p>
-          <label className="monitor-line">
+          <label className="monitor-toggle">
             <input
               type="checkbox"
               checked={autoStop}

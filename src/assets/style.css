@@ -620,3 +620,20 @@ button:disabled {
 .journey-info { margin-top: 8px; font-size: 0.9rem; }
 .journey-info p { margin: 2px 0; }
 .line-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+.monitor-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #12324e;
+  cursor: pointer;
+}
+.monitor-toggle input[type="checkbox"] {
+  min-width: 0;
+  min-height: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+}
