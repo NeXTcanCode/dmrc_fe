@@ -19,10 +19,23 @@ import {
   fetchTrips,
   markTripConfirmed,
 } from "../features/tripsSlice";
-import { distanceInMeters, findNearestStation } from "../services/geolocationService";
+import {
+  distanceInMeters,
+  findNearestStation,
+} from "../services/geolocationService";
 import { trackedStations } from "../data/trackedStations";
-import { locationDeniedSet, missedRideCleared } from "../features/monitoringSlice";
-import { clearGpsLog, createMissedTrip, downloadGpsLog, isDebugEnabled, startMonitoringWatch, stopMonitoringWatch } from "../services/monitoringWatch";
+import {
+  locationDeniedSet,
+  missedRideCleared,
+} from "../features/monitoringSlice";
+import {
+  clearGpsLog,
+  createMissedTrip,
+  downloadGpsLog,
+  isDebugEnabled,
+  startMonitoringWatch,
+  stopMonitoringWatch,
+} from "../services/monitoringWatch";
 import { planJourney } from "../services/metroService";
 import { DMRC_STATION_CODES } from "../data/dmrcStationCodes";
 
@@ -78,9 +91,14 @@ export default function Dashboard() {
   const dispatch = useDispatch();
   const wallet = useSelector((state) => state.wallet);
   const trips = useSelector((state) => state.trips.items);
-  const { active: monitoring, message: monitorMessage, journey, nearest: liveNearest, missedRide, locationDenied } = useSelector(
-    (state) => state.monitoring
-  );
+  const {
+    active: monitoring,
+    message: monitorMessage,
+    journey,
+    nearest: liveNearest,
+    missedRide,
+    locationDenied,
+  } = useSelector((state) => state.monitoring);
 
   const [rechargeAmount, setRechargeAmount] = useState("100");
   const [rechargeMode, setRechargeMode] = useState("online");
@@ -355,7 +373,12 @@ export default function Dashboard() {
   const onCorrectBalance = async () => {
     setError("");
     const balance = Number(realBalance);
-    if (realBalance === "" || Number.isNaN(balance) || balance < 0 || balance > 3000) {
+    if (
+      realBalance === "" ||
+      Number.isNaN(balance) ||
+      balance < 0 ||
+      balance > 3000
+    ) {
       const msg = "Enter the balance shown on your card, between 0 and 3000.";
       setError(msg);
       toast.error(msg);
@@ -367,11 +390,14 @@ export default function Dashboard() {
       toast.success(
         res.difference === 0
           ? "Balance already matches."
-          : `Balance corrected (${res.difference > 0 ? "+" : "-"}INR ${Math.abs(res.difference)}).`
+          : `Balance corrected (${res.difference > 0 ? "+" : "-"}INR ${Math.abs(
+              res.difference
+            )}).`
       );
       setRealBalance("");
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || "Failed to correct balance";
+      const msg =
+        e?.response?.data?.message || e?.message || "Failed to correct balance";
       setError(msg);
       toast.error(msg);
     }
@@ -500,7 +526,9 @@ export default function Dashboard() {
           trackedStations
         );
         setOneShotNearest(
-          hit ? { name: hit.station.name, meters: Math.round(hit.meters) } : null
+          hit
+            ? { name: hit.station.name, meters: Math.round(hit.meters) }
+            : null
         );
         setLocating(false);
       },
@@ -565,17 +593,26 @@ export default function Dashboard() {
           {missedRide && (
             <div className="journey-info">
               <p>
-                Did you travel from <strong>{missedRide.from.name}</strong>? Where did you get off?
+                Did you travel from <strong>{missedRide.from.name}</strong>?
+                Where did you get off?
               </p>
               <div className="row actions">
-                <select value={missedExitId} onChange={(e) => setMissedExitId(e.target.value)}>
+                <select
+                  value={missedExitId}
+                  onChange={(e) => setMissedExitId(e.target.value)}
+                >
                   <option value="">Select exit station</option>
                   {stationOptions.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
                   ))}
                 </select>
                 <button onClick={onCreateMissedTrip}>Create Trip</button>
-                <button className="secondary" onClick={() => dispatch(missedRideCleared())}>
+                <button
+                  className="secondary"
+                  onClick={() => dispatch(missedRideCleared())}
+                >
                   No, dismiss
                 </button>
               </div>
@@ -584,19 +621,30 @@ export default function Dashboard() {
           {journey && (
             <div className="journey-info">
               <p>
-                <span className="line-dot" style={{ background: journey.lineColor }} />
+                <span
+                  className="line-dot"
+                  style={{ background: journey.lineColor }}
+                />
                 {journey.lineName} towards {journey.toward}
               </p>
-              <p>{journey.atTerminus ? "Last station" : "Next station"}: <strong>{journey.next}</strong></p>
+              <p>
+                {journey.atTerminus ? "Last station" : "Next station"}:{" "}
+                <strong>{journey.next}</strong>
+              </p>
               {journey.interchange && (
                 <p>
-                  Upcoming interchange: <strong>{journey.interchange.name}</strong>
-                  {journey.interchange.stopsAway > 0 && ` (${journey.interchange.stopsAway} stops after next)`}
+                  Upcoming interchange:{" "}
+                  <strong>{journey.interchange.name}</strong>
+                  {journey.interchange.stopsAway > 0 &&
+                    ` (${journey.interchange.stopsAway} stops after next)`}
                   {journey.interchange.lines.length > 0 && " - change for "}
                   {journey.interchange.lines.map((l, i) => (
                     <span key={l.name}>
                       {i > 0 && ", "}
-                      <span className="line-dot" style={{ background: l.color }} />
+                      <span
+                        className="line-dot"
+                        style={{ background: l.color }}
+                      />
                       {l.name}
                     </span>
                   ))}
@@ -616,7 +664,11 @@ export default function Dashboard() {
               </>
             )}
             {!monitoring && (
-              <button className="secondary" onClick={findNearest} disabled={locating}>
+              <button
+                className="secondary"
+                onClick={findNearest}
+                disabled={locating}
+              >
                 {locating ? "Locating..." : "Find Nearest Station"}
               </button>
             )}
@@ -715,105 +767,110 @@ export default function Dashboard() {
       </motion.section>
 
       {showManual ? (
-      <motion.section className="card full" variants={itemVariants}>
-        <div className="section-head">
-          <h2>
-            Add a trip manually
-            <span style={{ fontSize: "14px" }}>
-              {" "}(For missed trips or when location is unavailable.)
-            </span>
-          </h2>
-        </div>
+        <motion.section className="card full" variants={itemVariants}>
+          <div className="section-head">
+            <h2>
+              Add a trip manually
+              <span style={{ fontSize: "14px" }}>
+                {" "}
+                (For missed trips or when location is unavailable.)
+              </span>
+            </h2>
+          </div>
 
-        <div className="row actions manual-grid">
-          <motion.div
-            className="field-motion"
-            whileHover={{ y: -1 }}
-            whileFocus={{ scale: 1.01 }}
-          >
-            <input
-              type="text"
-              placeholder="Search boarding station..."
-              value={boardingSearch}
-              onChange={(e) => setBoardingSearch(e.target.value)}
-            />
-          </motion.div>
-          <motion.div
-            className="field-motion"
-            whileHover={{ y: -1 }}
-            whileFocus={{ scale: 1.01 }}
-          >
-            <select
-              value={boardingStationId}
-              onChange={(e) => setBoardingStationId(e.target.value)}
+          <div className="row actions manual-grid">
+            <motion.div
+              className="field-motion"
+              whileHover={{ y: -1 }}
+              whileFocus={{ scale: 1.01 }}
             >
-              {filteredBoardingOptions.length ? (
-                filteredBoardingOptions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))
-              ) : (
-                <option value="">No stations found</option>
-              )}
-            </select>
-          </motion.div>
-          <motion.div
-            className="field-motion"
-            whileHover={{ y: -1 }}
-            whileFocus={{ scale: 1.01 }}
-          >
-            <input
-              type="text"
-              placeholder="Search alighting station..."
-              value={alightingSearch}
-              onChange={(e) => setAlightingSearch(e.target.value)}
-            />
-          </motion.div>
-          <motion.div
-            className="field-motion"
-            whileHover={{ y: -1 }}
-            whileFocus={{ scale: 1.01 }}
-          >
-            <select
-              value={alightingStationId}
-              onChange={(e) => setAlightingStationId(e.target.value)}
+              <input
+                type="text"
+                placeholder="Search boarding station..."
+                value={boardingSearch}
+                onChange={(e) => setBoardingSearch(e.target.value)}
+              />
+            </motion.div>
+            <motion.div
+              className="field-motion"
+              whileHover={{ y: -1 }}
+              whileFocus={{ scale: 1.01 }}
             >
-              {filteredAlightingOptions.length ? (
-                filteredAlightingOptions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))
-              ) : (
-                <option value="">No stations found</option>
-              )}
-            </select>
-          </motion.div>
-          <motion.button
-            className="manual-submit"
-            onClick={onAddPendingTrip}
-            whileTap={{ scale: 0.98 }}
-          >
-            Create Pending Trip
-          </motion.button>
-        </div>
-        <p className="manual-estimate" style={{ marginTop: "8px" }}>
-          {estimateLoading ? (
-            "Fetching live route pricing..."
-          ) : (
-            <>
-              Estimated distance for fare:{" "}
-              <strong>{estimatedDistanceKm} km</strong> • Estimated fare:{" "}
-              <strong>INR {estimatedFare}</strong>
-              {!journeyEstimate && " (offline estimate)"}
-            </>
-          )}
-        </p>
-      </motion.section>
+              <select
+                value={boardingStationId}
+                onChange={(e) => setBoardingStationId(e.target.value)}
+              >
+                {filteredBoardingOptions.length ? (
+                  filteredBoardingOptions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No stations found</option>
+                )}
+              </select>
+            </motion.div>
+            <motion.div
+              className="field-motion"
+              whileHover={{ y: -1 }}
+              whileFocus={{ scale: 1.01 }}
+            >
+              <input
+                type="text"
+                placeholder="Search alighting station..."
+                value={alightingSearch}
+                onChange={(e) => setAlightingSearch(e.target.value)}
+              />
+            </motion.div>
+            <motion.div
+              className="field-motion"
+              whileHover={{ y: -1 }}
+              whileFocus={{ scale: 1.01 }}
+            >
+              <select
+                value={alightingStationId}
+                onChange={(e) => setAlightingStationId(e.target.value)}
+              >
+                {filteredAlightingOptions.length ? (
+                  filteredAlightingOptions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No stations found</option>
+                )}
+              </select>
+            </motion.div>
+            <motion.button
+              className="manual-submit"
+              onClick={onAddPendingTrip}
+              whileTap={{ scale: 0.98 }}
+            >
+              Create Pending Trip
+            </motion.button>
+          </div>
+          <p className="manual-estimate" style={{ marginTop: "8px" }}>
+            {estimateLoading ? (
+              "Fetching live route pricing..."
+            ) : (
+              <>
+                Estimated distance for fare:{" "}
+                <strong>{estimatedDistanceKm} km</strong> • Estimated fare:{" "}
+                <strong>INR {estimatedFare}</strong>
+                {!journeyEstimate && " (offline estimate)"}
+              </>
+            )}
+          </p>
+        </motion.section>
       ) : (
         <motion.section className="card full" variants={itemVariants}>
-          <button className="secondary" onClick={() => setManualOpen(true)}>
+          <button
+            className="secondary"
+            style={{ margin: "auto", display: "block" }}
+            onClick={() => setManualOpen(true)}
+          >
             Missed a trip? Add it manually
           </button>
         </motion.section>
